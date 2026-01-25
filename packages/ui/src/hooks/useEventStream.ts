@@ -536,6 +536,15 @@ export const useEventStream = () => {
 
     const task = (async (): Promise<void> => {
       try {
+        // Try web server's tracked activity first - more reliable on visibility restore
+        // because it tracks activity even when UI is not listening to SSE
+        const webServerActivity = await opencodeClient.getWebServerSessionActivity();
+        if (webServerActivity && Object.keys(webServerActivity).length > 0) {
+          applyStatusMap(webServerActivity);
+          return;
+        }
+
+        // Fallback to OpenCode's global session status
         const globalStatusMap = await opencodeClient.getGlobalSessionStatus();
         if (globalStatusMap && Object.keys(globalStatusMap).length > 0) {
           applyStatusMap(globalStatusMap);

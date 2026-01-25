@@ -2741,6 +2741,12 @@ async function main(options = {}) {
     });
   });
 
+  // Session activity status endpoint - returns tracked activity phases for all sessions
+  // Used by UI on visibility restore to get accurate status without waiting for SSE
+  app.get('/api/session-activity', (_req, res) => {
+    res.json(getSessionActivitySnapshot());
+  });
+
   app.get('/api/openchamber/update-check', async (_req, res) => {
     try {
       const { checkForUpdates } = await import('./lib/package-manager.js');
@@ -2962,6 +2968,7 @@ async function main(options = {}) {
       void maybeSendPushForTrigger(payload);
       const activity = deriveSessionActivity(payload);
       if (activity) {
+        setSessionActivityPhase(activity.sessionId, activity.phase);
         writeSseEvent(res, {
           type: 'openchamber:session-activity',
           properties: {
@@ -3082,6 +3089,7 @@ async function main(options = {}) {
       void maybeSendPushForTrigger(payload);
       const activity = deriveSessionActivity(payload);
       if (activity) {
+        setSessionActivityPhase(activity.sessionId, activity.phase);
         writeSseEvent(res, {
           type: 'openchamber:session-activity',
           properties: {
