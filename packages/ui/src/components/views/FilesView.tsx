@@ -1287,10 +1287,9 @@ export const FilesView: React.FC = () => {
         style={{ width: 'min(100vw - 1rem, 42rem)' }}
       >
         <div 
-          className="w-full rounded-xl border flex flex-col relative shadow-lg" 
+          className="w-full rounded-xl flex flex-col relative shadow-lg border border-border/80 focus-within:border-primary/70 focus-within:ring-1 focus-within:ring-primary/50"
           style={{ 
-            borderColor: 'var(--primary)',
-            backgroundColor: currentTheme?.colors?.surface?.elevated,
+            backgroundColor: currentTheme?.colors?.surface?.subtle,
           }}
         >
           <Textarea
@@ -1304,7 +1303,7 @@ export const FilesView: React.FC = () => {
               textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
             }}
             placeholder="Type your comment..."
-            className="min-h-[28px] max-h-[108px] resize-none border-0 px-3 pt-2 pb-1 shadow-none rounded-none appearance-none focus:shadow-none focus-visible:shadow-none focus-visible:border-transparent focus-visible:ring-0 focus-visible:ring-transparent hover:border-transparent bg-transparent dark:bg-transparent focus-visible:outline-none overflow-y-auto"
+            className="min-h-[28px] max-h-[108px] resize-none border-0 px-3 pt-2 pb-1 rounded-none appearance-none hover:border-transparent bg-transparent dark:bg-transparent overflow-y-auto focus:ring-0 focus:shadow-none"
             autoFocus={!isMobile}
             rows={1}
             onKeyDown={(e) => {
@@ -1987,7 +1986,7 @@ export const FilesView: React.FC = () => {
         )
        ) : (
          <div className="flex flex-1 min-h-0 min-w-0 gap-3 px-3 pb-3 pt-2">
-           {screenWidth >= 1024 && (
+           {screenWidth >= 700 && (
              <div className="w-72 flex-shrink-0 min-h-0 overflow-hidden">
                {treePanel}
              </div>
