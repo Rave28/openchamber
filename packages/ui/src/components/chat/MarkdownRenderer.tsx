@@ -48,6 +48,8 @@ const withStableStringId = <T extends object>(value: T, id: string): T => {
 const useMarkdownShikiThemes = (): readonly [string | object, string | object] => {
   const themeSystem = useOptionalThemeSystem();
 
+  const isVSCode = isVSCodeRuntime() && typeof window !== 'undefined';
+
   const fallbackLight = getDefaultTheme(false);
   const fallbackDark = getDefaultTheme(true);
 
@@ -67,7 +69,7 @@ const useMarkdownShikiThemes = (): readonly [string | object, string | object] =
   );
 
   const getThemes = React.useCallback((): readonly [string | object, string | object] => {
-    if (!isVSCodeRuntime() || typeof window === 'undefined') {
+    if (!isVSCode) {
       return fallbackThemes;
     }
 
@@ -85,16 +87,20 @@ const useMarkdownShikiThemes = (): readonly [string | object, string | object] =
     }
 
     return fallbackThemes;
-  }, [fallbackThemes]);
+  }, [fallbackThemes, isVSCode]);
 
   const [themes, setThemes] = React.useState(getThemes);
 
   React.useEffect(() => {
+    if (!isVSCode) {
+      return;
+    }
+
     setThemes(getThemes());
-  }, [getThemes]);
+  }, [getThemes, isVSCode]);
 
   React.useEffect(() => {
-    if (!isVSCodeRuntime() || typeof window === 'undefined') return;
+    if (!isVSCode) return;
 
     const handler = (event: Event) => {
       // Rely on the canonical `window.__OPENCHAMBER_VSCODE_SHIKI_THEMES__` that the webview updates
@@ -105,9 +111,9 @@ const useMarkdownShikiThemes = (): readonly [string | object, string | object] =
 
     window.addEventListener('openchamber:vscode-shiki-themes', handler as EventListener);
     return () => window.removeEventListener('openchamber:vscode-shiki-themes', handler as EventListener);
-  }, [getThemes]);
+  }, [getThemes, isVSCode]);
 
-  return themes;
+  return isVSCode ? themes : fallbackThemes;
 };
 
 // Table utility functions
