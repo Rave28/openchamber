@@ -6,7 +6,7 @@ import React, {
 } from 'react';
 import type { Theme, ThemeMode } from '@/types/theme';
 import type { DesktopSettings } from '@/lib/desktop';
-import { isVSCodeRuntime } from '@/lib/desktop';
+import { isDesktopRuntime, isVSCodeRuntime } from '@/lib/desktop';
 import { CSSVariableGenerator } from '@/lib/theme/cssGenerator';
 import { updateDesktopSettings } from '@/lib/persistence';
 import {
@@ -38,36 +38,76 @@ const getSystemPreference = (): boolean => {
 const fallbackThemeForVariant = (variant: 'light' | 'dark'): Theme =>
   getDefaultTheme(variant === 'dark');
 
-const findFallbackThemeId = (variant: 'light' | 'dark'): string => {
-  const fallback = themes.find((candidate) => candidate.metadata.variant === variant);
-  return (fallback ?? fallbackThemeForVariant(variant)).metadata.id;
-};
-
-const ensureThemeById = (themeId: string, variant: 'light' | 'dark'): Theme => {
-  const theme = getThemeById(themeId);
-  if (theme && theme.metadata.variant === variant) {
-    return theme;
-  }
-  const fallback = themes.find((candidate) => candidate.metadata.variant === variant);
-  return fallback ?? fallbackThemeForVariant(variant);
-};
-
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? React.useLayoutEffect : React.useEffect;
 
-const validateThemeId = (themeId: string | null, variant: 'light' | 'dark'): string => {
-  if (!themeId) {
-    const preferredDefaultId = variant === 'light' ? DEFAULT_LIGHT_ID : DEFAULT_DARK_ID;
-    const preferredDefault = getThemeById(preferredDefaultId);
-    if (preferredDefault && preferredDefault.metadata.variant === variant) {
-      return preferredDefault.metadata.id;
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === 'string' && value.trim().length > 0;
+
+const getNested = (value: unknown, path: string[]): unknown =>
+  path.reduce<unknown>((acc, key) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[key] : undefined), value);
+
+const isValidCustomTheme = (value: unknown): value is Theme => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const requiredPaths = [
+    ['metadata', 'id'],
+    ['metadata', 'name'],
+    ['metadata', 'variant'],
+    ['colors', 'primary', 'base'],
+    ['colors', 'primary', 'foreground'],
+    ['colors', 'surface', 'background'],
+    ['colors', 'surface', 'foreground'],
+    ['colors', 'surface', 'muted'],
+    ['colors', 'surface', 'mutedForeground'],
+    ['colors', 'surface', 'elevated'],
+    ['colors', 'surface', 'elevatedForeground'],
+    ['colors', 'surface', 'subtle'],
+    ['colors', 'interactive', 'border'],
+    ['colors', 'interactive', 'selection'],
+    ['colors', 'interactive', 'selectionForeground'],
+    ['colors', 'interactive', 'focusRing'],
+    ['colors', 'interactive', 'hover'],
+    ['colors', 'status', 'error'],
+    ['colors', 'status', 'errorForeground'],
+    ['colors', 'status', 'errorBackground'],
+    ['colors', 'status', 'errorBorder'],
+    ['colors', 'status', 'warning'],
+    ['colors', 'status', 'warningForeground'],
+    ['colors', 'status', 'warningBackground'],
+    ['colors', 'status', 'warningBorder'],
+    ['colors', 'status', 'success'],
+    ['colors', 'status', 'successForeground'],
+    ['colors', 'status', 'successBackground'],
+    ['colors', 'status', 'successBorder'],
+    ['colors', 'status', 'info'],
+    ['colors', 'status', 'infoForeground'],
+    ['colors', 'status', 'infoBackground'],
+    ['colors', 'status', 'infoBorder'],
+    ['colors', 'syntax', 'base', 'background'],
+    ['colors', 'syntax', 'base', 'foreground'],
+    ['colors', 'syntax', 'base', 'keyword'],
+    ['colors', 'syntax', 'base', 'string'],
+    ['colors', 'syntax', 'base', 'number'],
+    ['colors', 'syntax', 'base', 'function'],
+    ['colors', 'syntax', 'base', 'variable'],
+    ['colors', 'syntax', 'base', 'type'],
+    ['colors', 'syntax', 'base', 'comment'],
+    ['colors', 'syntax', 'base', 'operator'],
+    ['colors', 'syntax', 'highlights', 'diffAdded'],
+    ['colors', 'syntax', 'highlights', 'diffRemoved'],
+    ['colors', 'syntax', 'highlights', 'lineNumber'],
+  ];
+
+  for (const path of requiredPaths) {
+    if (!isNonEmptyString(getNested(value, path))) {
+      return false;
     }
-    return findFallbackThemeId(variant);
   }
-  const theme = getThemeById(themeId);
-  if (theme && theme.metadata.variant === variant) {
-    return theme.metadata.id;
-  }
-  return findFallbackThemeId(variant);
+
+  const variant = getNested(value, ['metadata', 'variant']);
+  return variant === 'light' || variant === 'dark';
 };
 
 const buildInitialPreferences = (defaultThemeId?: string): ThemePreferences => {
@@ -104,8 +144,13 @@ const buildInitialPreferences = (defaultThemeId?: string): ThemePreferences => {
       themeMode = legacyVariant;
     }
 
-    lightThemeId = validateThemeId(storedLightId, 'light');
-    darkThemeId = validateThemeId(storedDarkId, 'dark');
+    if (typeof storedLightId === 'string' && storedLightId.trim().length > 0) {
+      lightThemeId = storedLightId.trim();
+    }
+
+    if (typeof storedDarkId === 'string' && storedDarkId.trim().length > 0) {
+      darkThemeId = storedDarkId.trim();
+    }
   }
 
   if (defaultThemeId) {
@@ -135,6 +180,8 @@ export function ThemeSystemProvider({ children, defaultThemeId }: ThemeSystemPro
   const cssGenerator = useMemo(() => new CSSVariableGenerator(), []);
   const [preferences, setPreferences] = useState<ThemePreferences>(() => buildInitialPreferences(defaultThemeId));
   const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() => getSystemPreference());
+  const [customThemes, setCustomThemes] = useState<Theme[]>([]);
+  const [customThemesLoading, setCustomThemesLoading] = useState(false);
   const [vscodeTheme, setVSCodeTheme] = useState<Theme | null>(() => {
     if (typeof window === 'undefined' || !isVSCodeRuntime()) {
       return null;
@@ -143,6 +190,47 @@ export function ThemeSystemProvider({ children, defaultThemeId }: ThemeSystemPro
     return existing || null;
   });
   const isVSCode = useMemo(() => isVSCodeRuntime(), []);
+  const isDesktop = useMemo(() => isDesktopRuntime(), []);
+
+  const availableThemes = useMemo(() => {
+    const merged: Theme[] = [];
+    const seen = new Set<string>();
+
+    const add = (theme: Theme) => {
+      const id = theme.metadata.id;
+      if (seen.has(id)) return;
+      seen.add(id);
+      merged.push(theme);
+    };
+
+    if (isVSCode && vscodeTheme) {
+      add(vscodeTheme);
+    }
+
+    // Custom themes first so they can override built-ins with the same id.
+    customThemes.forEach(add);
+    themes.forEach(add);
+
+    return merged;
+  }, [customThemes, isVSCode, vscodeTheme]);
+
+  const getThemeByIdFromAvailable = useCallback(
+    (themeId: string): Theme | undefined => availableThemes.find((theme) => theme.metadata.id === themeId),
+    [availableThemes],
+  );
+
+  const ensureThemeById = useCallback(
+    (themeId: string, variant: 'light' | 'dark'): Theme => {
+      const theme = getThemeByIdFromAvailable(themeId);
+      if (theme && theme.metadata.variant === variant) {
+        return theme;
+      }
+
+      const fallback = availableThemes.find((candidate) => candidate.metadata.variant === variant);
+      return fallback ?? fallbackThemeForVariant(variant);
+    },
+    [availableThemes, getThemeByIdFromAvailable],
+  );
 
   const currentTheme = useMemo(() => {
     if (isVSCode && vscodeTheme) {
@@ -157,12 +245,46 @@ export function ThemeSystemProvider({ children, defaultThemeId }: ThemeSystemPro
     return systemPrefersDark
       ? ensureThemeById(preferences.darkThemeId, 'dark')
       : ensureThemeById(preferences.lightThemeId, 'light');
-  }, [isVSCode, preferences, systemPrefersDark, vscodeTheme]);
+  }, [ensureThemeById, isVSCode, preferences, systemPrefersDark, vscodeTheme]);
 
-  const availableThemes = useMemo(
-    () => (isVSCode && vscodeTheme ? [vscodeTheme, ...themes] : themes),
-    [isVSCode, vscodeTheme],
-  );
+  const reloadCustomThemes = useCallback(async () => {
+    if (typeof window === 'undefined' || isVSCode) {
+      return;
+    }
+
+    setCustomThemesLoading(true);
+    try {
+      const res = await fetch('/api/config/themes', {
+        method: 'GET',
+        credentials: isDesktop ? 'omit' : 'include',
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+
+      if (res.status === 401) {
+        // UI auth gate will handle prompting; avoid noisy retries here.
+        return;
+      }
+
+      if (!res.ok) {
+        return;
+      }
+
+      const payload = await res.json();
+      const incoming = Array.isArray(payload?.themes) ? payload.themes : [];
+      const normalized = incoming.filter(isValidCustomTheme);
+      setCustomThemes(normalized);
+    } catch {
+      // ignore
+    } finally {
+      setCustomThemesLoading(false);
+    }
+  }, [isDesktop, isVSCode]);
+
+  useEffect(() => {
+    void reloadCustomThemes();
+  }, [reloadCustomThemes]);
 
   useEffect(() => {
     if (!isVSCode) {
@@ -273,17 +395,14 @@ export function ThemeSystemProvider({ children, defaultThemeId }: ThemeSystemPro
 
     // Splash screen (packages/web/index.html) runs before the theme CSS vars load.
     // Persist just enough to theme it on next boot.
-    const lightTheme = getThemeById(preferences.lightThemeId);
-    const darkTheme = getThemeById(preferences.darkThemeId);
-    if (lightTheme) {
-      localStorage.setItem('splashBgLight', lightTheme.colors.surface.background);
-      localStorage.setItem('splashFgLight', lightTheme.colors.surface.foreground);
-    }
-    if (darkTheme) {
-      localStorage.setItem('splashBgDark', darkTheme.colors.surface.background);
-      localStorage.setItem('splashFgDark', darkTheme.colors.surface.foreground);
-    }
-  }, [preferences, currentTheme]);
+    const lightTheme = ensureThemeById(preferences.lightThemeId, 'light');
+    const darkTheme = ensureThemeById(preferences.darkThemeId, 'dark');
+
+    localStorage.setItem('splashBgLight', lightTheme.colors.surface.background);
+    localStorage.setItem('splashFgLight', lightTheme.colors.surface.foreground);
+    localStorage.setItem('splashBgDark', darkTheme.colors.surface.background);
+    localStorage.setItem('splashFgDark', darkTheme.colors.surface.foreground);
+  }, [preferences, currentTheme, ensureThemeById]);
 
   useEffect(() => {
     void updateDesktopSettings({
@@ -317,12 +436,12 @@ export function ThemeSystemProvider({ children, defaultThemeId }: ThemeSystemPro
 
         let nextLight = prev.lightThemeId;
         if (typeof detail.lightThemeId === 'string' && detail.lightThemeId.length > 0) {
-          nextLight = validateThemeId(detail.lightThemeId, 'light');
+          nextLight = detail.lightThemeId.trim();
         }
 
         let nextDark = prev.darkThemeId;
         if (typeof detail.darkThemeId === 'string' && detail.darkThemeId.length > 0) {
-          nextDark = validateThemeId(detail.darkThemeId, 'dark');
+          nextDark = detail.darkThemeId.trim();
         }
 
         const same =
@@ -471,6 +590,8 @@ export function ThemeSystemProvider({ children, defaultThemeId }: ThemeSystemPro
     currentTheme,
     availableThemes,
     setTheme,
+    customThemesLoading,
+    reloadCustomThemes,
     isSystemPreference: preferences.themeMode === 'system',
     setSystemPreference: setSystemPreferenceHandler,
     themeMode: preferences.themeMode,

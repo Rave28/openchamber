@@ -118,19 +118,27 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
         themeMode,
         setThemeMode,
         availableThemes,
+        customThemesLoading,
+        reloadCustomThemes,
         lightThemeId,
         darkThemeId,
         setLightThemePreference,
         setDarkThemePreference,
     } = useThemeSystem();
 
+    const [themesReloading, setThemesReloading] = React.useState(false);
+
     const lightThemes = React.useMemo(
-        () => availableThemes.filter((theme) => theme.metadata.variant === 'light'),
+        () => availableThemes
+            .filter((theme) => theme.metadata.variant === 'light')
+            .sort((a, b) => a.metadata.name.localeCompare(b.metadata.name)),
         [availableThemes],
     );
 
     const darkThemes = React.useMemo(
-        () => availableThemes.filter((theme) => theme.metadata.variant === 'dark'),
+        () => availableThemes
+            .filter((theme) => theme.metadata.variant === 'dark')
+            .sort((a, b) => a.metadata.name.localeCompare(b.metadata.name)),
         [availableThemes],
     );
 
@@ -181,10 +189,10 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                         <div className="flex flex-col gap-1.5">
                             <h4 className="typography-ui-label font-medium text-foreground">Light Theme</h4>
                             <Select value={selectedLightTheme?.metadata.id ?? ''} onValueChange={setLightThemePreference}>
-                                <SelectTrigger aria-label="Select light theme">
+                                <SelectTrigger aria-label="Select light theme" className="min-w-32">
                                     <SelectValue placeholder="Select theme" />
                                 </SelectTrigger>
-                                <SelectContent fitContent={false}>
+                                <SelectContent className="max-h-64 min-w-40">
                                     {lightThemes.map((theme) => (
                                         <SelectItem key={theme.metadata.id} value={theme.metadata.id}>
                                             {formatThemeLabel(theme.metadata.name, 'light')}
@@ -197,10 +205,10 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                         <div className="flex flex-col gap-1.5">
                             <h4 className="typography-ui-label font-medium text-foreground">Dark Theme</h4>
                             <Select value={selectedDarkTheme?.metadata.id ?? ''} onValueChange={setDarkThemePreference}>
-                                <SelectTrigger aria-label="Select dark theme">
+                                <SelectTrigger aria-label="Select dark theme" className="min-w-32">
                                     <SelectValue placeholder="Select theme" />
                                 </SelectTrigger>
-                                <SelectContent fitContent={false}>
+                                <SelectContent className="max-h-64 min-w-40">
                                     {darkThemes.map((theme) => (
                                         <SelectItem key={theme.metadata.id} value={theme.metadata.id}>
                                             {formatThemeLabel(theme.metadata.name, 'dark')}
@@ -209,6 +217,28 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                 </SelectContent>
                             </Select>
                         </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <button
+                            type="button"
+                            disabled={customThemesLoading || themesReloading}
+                            onClick={async () => {
+                                setThemesReloading(true);
+                                try {
+                                    await reloadCustomThemes();
+                                } finally {
+                                    setThemesReloading(false);
+                                }
+                            }}
+                            className="typography-ui-label text-muted-foreground hover:text-foreground hover:underline underline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                        >
+                            <RiRestartLine className={cn('h-3.5 w-3.5', themesReloading && 'animate-spin')} />
+                            Reload custom themes
+                        </button>
+                        <p className="typography-meta text-muted-foreground/70">
+                            Import themes from ~/.config/openchamber/themes/
+                        </p>
                     </div>
                 </div>
             )}

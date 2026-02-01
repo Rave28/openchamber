@@ -1,38 +1,30 @@
 ---
-title: Adding New Themes
+title: Adding Themes
 ---
 
-# Adding New Themes
+# Adding Themes
 
-## 1. Create JSON Files
+## Custom Themes (User)
 
-Create two files in `packages/ui/src/lib/theme/themes/`:
+Drop a JSON file into `~/.config/openchamber/themes/`. No rebuild needed.
+
+1. Create theme file (e.g., `my-theme.json`)
+2. In app: **Settings → Theme → Reload themes**
+3. Select from dropdown
+
+See `docs/CUSTOM_THEMES.md` for full format reference.
+
+## Built-in Themes (Development)
+
+### 1. Create JSON Files
+
+Add to `packages/ui/src/lib/theme/themes/`:
 - `<id>-light.json`
 - `<id>-dark.json`
 
-## 2. Follow Theme Structure
+Use existing themes (e.g., `flexoki-dark.json`) as reference for the full structure.
 
-```json
-{
-  "metadata": {
-    "id": "mytheme-light",
-    "name": "My Theme Light",
-    "variant": "light",
-    "tags": ["warm", "retro"]
-  },
-  "colors": {
-    "primary": { "base": "#...", "hover": "#...", ... },
-    "surface": { "background": "#...", "elevated": "#...", ... },
-    "interactive": { "border": "#...", "hover": "#...", ... },
-    "status": { "error": "#...", "warning": "#...", ... },
-    "syntax": { "base": { "background": "#...", ... } }
-  }
-}
-```
-
-See `packages/ui/src/types/theme.ts` for full interface.
-
-## 3. Register in presets.ts
+### 2. Register in presets.ts
 
 ```typescript
 import mytheme_light_Raw from './mytheme-light.json';
@@ -45,14 +37,15 @@ export const presetThemes: Theme[] = [
 ];
 ```
 
-## 4. Validate
+### 3. Validate
 
 ```bash
 bun run type-check && bun run lint && bun run build
 ```
 
-## Resources
+## Key Files
 
 - Theme types: `packages/ui/src/types/theme.ts`
 - Presets: `packages/ui/src/lib/theme/themes/presets.ts`
-- Example: `packages/ui/src/lib/theme/themes/flexoki-light.json`
+- Example: `packages/ui/src/lib/theme/themes/flexoki-dark.json`
+- Custom themes doc: `docs/CUSTOM_THEMES.md`
