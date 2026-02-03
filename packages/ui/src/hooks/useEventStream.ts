@@ -99,36 +99,6 @@ const getMessageFromStore = (sessionId: string, messageId: string): { info: Mess
   return message;
 };
 
-const formatModelID = (raw: string): string => {
-  if (!raw) {
-    return 'Assistant';
-  }
-
-  const tokens: string[] = raw.split(/[-_]/);
-  const result: string[] = [];
-  let i = 0;
-
-  while (i < tokens.length) {
-    const current = tokens[i];
-
-    if (/^\d+$/.test(current)) {
-      if (i + 1 < tokens.length && /^\d+$/.test(tokens[i + 1])) {
-        const combined = `${current}.${tokens[i + 1]}`;
-        result.push(combined);
-        i += 2;
-        continue;
-      }
-    }
-
-    result.push(current);
-    i += 1;
-  }
-
-  return result
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-};
-
 export const useEventStream = () => {
   const {
     addStreamingPart,
@@ -149,8 +119,6 @@ export const useEventStream = () => {
 
   const { checkConnection } = useConfigStore();
   const nativeNotificationsEnabled = useUIStore((state) => state.nativeNotificationsEnabled);
-  const notificationMode = useUIStore((state) => state.notificationMode);
-  const notifyOnSubtasks = useUIStore((state) => state.notifyOnSubtasks);
   const fallbackDirectory = useDirectoryStore((state) => state.currentDirectory);
 
   const activeSessionDirectory = React.useMemo(() => {
@@ -1302,42 +1270,6 @@ export const useEventStream = () => {
 
 	          completeStreamingMessage(sessionId, messageId);
 
-	          // Only notify when entire message is finished (finish === 'stop')
-	          if (finish === 'stop' && isWebRuntime() && nativeNotificationsEnabled) {
-	            const shouldNotify = notificationMode === 'always' || visibilityStateRef.current === 'hidden';
-
-	            if (shouldNotify) {
-	              // Check if this is a subtask and if we should notify for subtasks
-	              if (!notifyOnSubtasks) {
-	                const sessions = useSessionStore.getState().sessions;
-	                const session = sessions.find(s => s.id === sessionId);
-	                const isSubtask = session && 'parentID' in session && Boolean((session as { parentID?: string }).parentID);
-	                if (isSubtask) {
-	                  // Skip notification for subtasks
-	                  return;
-	                }
-	              }
-
-	              const notifiedMessages = notifiedMessagesRef.current;
-
-	              if (!notifiedMessages.has(messageId)) {
-	                notifiedMessages.add(messageId);
-
-	                const runtimeAPIs = getRegisteredRuntimeAPIs();
-
-	                if (runtimeAPIs?.notifications) {
-	                  const rawMode = (messageExt as { mode?: string }).mode || 'agent';
-	                  const rawModel = (messageExt as { modelID?: string }).modelID || 'assistant';
-
-	                  const title = `${rawMode.charAt(0).toUpperCase() + rawMode.slice(1)} agent is ready`;
-	                  const body = `${formatModelID(rawModel)} completed the task`;
-
-	                  void runtimeAPIs.notifications.notifyAgentCompletion({ title, body, tag: messageId });
-	                }
-	              }
-	            }
-	          }
-
 	          // For web/vscode: trigger cooldown only when assistant message has finish === "stop"
 	          // to match desktop backend semantics.
 	          if (!isTauriShellRef.current) {
@@ -1477,18 +1409,8 @@ export const useEventStream = () => {
                 });
               });
 
-	              if (isWebRuntime() && nativeNotificationsEnabled) {
-	                const shouldNotify = notificationMode === 'always' || visibilityStateRef.current === 'hidden';
-	                if (shouldNotify) {
-	                  const runtimeAPIs = getRegisteredRuntimeAPIs();
-	                  if (runtimeAPIs?.notifications) {
-	                    void runtimeAPIs.notifications.notifyAgentCompletion({
-	                      title: 'Permission required',
-	                      body: sessionTitle,
-	                      tag: `permission-${toastKey}`,
-	                    });
-	                  }
-	                }
+	              if (!isTauriShellRef.current && isWebRuntime() && nativeNotificationsEnabled) {
+	                // notifications are emitted server-side (see openchamber:notification)
 	              }
           }, 0);
         }
@@ -1509,39 +1431,7 @@ export const useEventStream = () => {
 
         const toastKey = `${request.sessionID}:${request.id}`;
 
-        if (isWebRuntime() && nativeNotificationsEnabled) {
-          const shouldNotify = notificationMode === 'always' || visibilityStateRef.current === 'hidden';
-
-          if (shouldNotify) {
-            const notifiedQuestions = notifiedQuestionsRef.current;
-
-            if (!notifiedQuestions.has(toastKey)) {
-              notifiedQuestions.add(toastKey);
-
-              const runtimeAPIs = getRegisteredRuntimeAPIs();
-
-              if (runtimeAPIs?.notifications) {
-                const first = Array.isArray(request.questions) ? request.questions[0] : undefined;
-                const header = typeof first?.header === 'string' ? first.header.trim() : '';
-                const questionText = typeof first?.question === 'string' ? first.question.trim() : '';
-
-                const title = /plan\s*mode/i.test(header)
-                  ? 'Switch to plan mode'
-                  : /build\s*agent/i.test(header)
-                    ? 'Switch to build mode'
-                    : header || 'Input needed';
-
-                const body = questionText || 'Agent is waiting for your response';
-
-                void runtimeAPIs.notifications.notifyAgentCompletion({
-                  title,
-                  body,
-                  tag: toastKey,
-                });
-              }
-            }
-          }
-        }
+	        // notifications are emitted server-side (see openchamber:notification)
 
         if (!questionToastShownRef.current.has(toastKey)) {
           setTimeout(() => {
@@ -1602,6 +1492,28 @@ export const useEventStream = () => {
         break;
       }
 
+      case 'openchamber:notification': {
+        if (isTauriShellRef.current) {
+          break;
+        }
+
+        const title = typeof (props as { title?: unknown }).title === 'string' ? (props as { title: string }).title : '';
+        const body = typeof (props as { body?: unknown }).body === 'string' ? (props as { body: string }).body : '';
+        const tag = typeof (props as { tag?: unknown }).tag === 'string' ? (props as { tag: string }).tag : undefined;
+        const requireHidden = Boolean((props as { requireHidden?: unknown }).requireHidden);
+
+        if (requireHidden && visibilityStateRef.current !== 'hidden') {
+          break;
+        }
+
+        const runtimeAPIs = getRegisteredRuntimeAPIs();
+        if (runtimeAPIs?.notifications && title) {
+          void runtimeAPIs.notifications.notifyAgentCompletion({ title, body, tag });
+        }
+
+        break;
+      }
+
       case 'todo.updated': {
         const sessionId = typeof props.sessionID === 'string' ? props.sessionID : null;
         const todos = Array.isArray(props.todos) ? props.todos : null;
@@ -1617,8 +1529,6 @@ export const useEventStream = () => {
   }, [
     currentSessionId,
     nativeNotificationsEnabled,
-    notificationMode,
-    notifyOnSubtasks,
     addStreamingPart,
     completeStreamingMessage,
     updateMessageInfo,
@@ -2105,6 +2015,5 @@ export const useEventStream = () => {
     maybeBootstrapIfStale,
     resyncMessages,
     scheduleSoftResync,
-    notifyOnSubtasks,
   ]);
 };

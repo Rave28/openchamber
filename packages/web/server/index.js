@@ -16,6 +16,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DEFAULT_PORT = 3000;
+const DESKTOP_NOTIFY_PREFIX = '[OpenChamberDesktopNotify] ';
+const uiNotificationClients = new Set();
 const HEALTH_CHECK_INTERVAL = 15000;
 const SHUTDOWN_TIMEOUT = 10000;
 const MODELS_DEV_API_URL = 'https://models.dev/api.json';
@@ -1745,7 +1747,8 @@ const ENV_CONFIGURED_OPENCODE_PORT = (() => {
 })();
 
 const ENV_SKIP_OPENCODE_START = process.env.OPENCODE_SKIP_START === 'true' ||
-                                   process.env.OPENCHAMBER_SKIP_OPENCODE_START === 'true';
+                                    process.env.OPENCHAMBER_SKIP_OPENCODE_START === 'true';
+const ENV_DESKTOP_NOTIFY = process.env.OPENCHAMBER_DESKTOP_NOTIFY === 'true';
 
 const ENV_CONFIGURED_API_PREFIX = normalizeApiPrefix(
   process.env.OPENCODE_API_PREFIX || process.env.OPENCHAMBER_API_PREFIX || ''
@@ -2059,6 +2062,44 @@ function parseSseDataPayload(block) {
   }
 }
 
+function emitDesktopNotification(payload) {
+  if (!ENV_DESKTOP_NOTIFY) {
+    return;
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return;
+  }
+
+  try {
+    // One-line protocol consumed by the Tauri shell.
+    process.stdout.write(`${DESKTOP_NOTIFY_PREFIX}${JSON.stringify(payload)}\n`);
+  } catch {
+    // ignore
+  }
+}
+
+function broadcastUiNotification(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return;
+  }
+
+  if (uiNotificationClients.size === 0) {
+    return;
+  }
+
+  for (const res of uiNotificationClients) {
+    try {
+      writeSseEvent(res, {
+        type: 'openchamber:notification',
+        properties: payload,
+      });
+    } catch {
+      // ignore
+    }
+  }
+}
+
 function deriveSessionActivity(payload) {
   if (!payload || typeof payload !== 'object') {
     return null;
@@ -2220,6 +2261,7 @@ const maybeSendPushForTrigger = async (payload) => {
     if (info?.role === 'assistant' && info?.finish === 'stop' && sessionId) {
       // Check if this is a subtask and if we should notify for subtasks
       const settings = await readSettingsFromDisk();
+
       if (settings.notifyOnSubtasks === false) {
         // Prefer parentID on payload (if present), else fetch from sessions list.
         const sessionInfo = payload.properties?.session;
@@ -2243,6 +2285,19 @@ const maybeSendPushForTrigger = async (payload) => {
 
       const title = `${formatMode(info?.mode)} agent is ready`;
       const body = `${formatModelId(info?.modelID)} completed the task`;
+
+      if (settings.nativeNotificationsEnabled) {
+        const payload = {
+          title,
+          body,
+          tag: `ready-${sessionId}`,
+          kind: 'ready',
+          sessionId,
+          requireHidden: settings.notificationMode !== 'always',
+        };
+        emitDesktopNotification(payload);
+        broadcastUiNotification(payload);
+      }
 
       await sendPushToAllUiSessions(
         {
@@ -2271,6 +2326,40 @@ const maybeSendPushForTrigger = async (payload) => {
 
     const timer = setTimeout(() => {
       pushQuestionDebounceTimers.delete(sessionId);
+
+      void readSettingsFromDisk().then((settings) => {
+        if (!settings.nativeNotificationsEnabled) {
+          return;
+        }
+
+        const firstQuestion = payload.properties?.questions?.[0];
+        const header = typeof firstQuestion?.header === 'string' ? firstQuestion.header.trim() : '';
+        const questionText = typeof firstQuestion?.question === 'string' ? firstQuestion.question.trim() : '';
+        const title = /plan\s*mode/i.test(header)
+          ? 'Switch to plan mode'
+          : /build\s*agent/i.test(header)
+            ? 'Switch to build mode'
+            : header || 'Input needed';
+        const body = questionText || 'Agent is waiting for your response';
+
+        emitDesktopNotification({
+          kind: 'question',
+          title,
+          body,
+          tag: `question-${sessionId}`,
+          sessionId,
+          requireHidden: settings.notificationMode !== 'always',
+        });
+
+        broadcastUiNotification({
+          kind: 'question',
+          title,
+          body,
+          tag: `question-${sessionId}`,
+          sessionId,
+          requireHidden: settings.notificationMode !== 'always',
+        });
+      });
 
       const firstQuestion = payload.properties?.questions?.[0];
       const header = typeof firstQuestion?.header === 'string' ? firstQuestion.header.trim() : '';
@@ -2316,6 +2405,36 @@ const maybeSendPushForTrigger = async (payload) => {
 
     const timer = setTimeout(() => {
       pushPermissionDebounceTimers.delete(sessionId);
+      void readSettingsFromDisk().then((settings) => {
+        if (!settings.nativeNotificationsEnabled) {
+          return;
+        }
+
+        const title = 'Permission required';
+        const sessionTitle = payload.properties?.sessionTitle;
+        const body = typeof sessionTitle === 'string' && sessionTitle.trim().length > 0
+          ? sessionTitle.trim()
+          : 'Agent is waiting for your approval';
+
+        emitDesktopNotification({
+          kind: 'permission',
+          title,
+          body,
+          tag: requestKey ? `permission-${requestKey}` : `permission-${sessionId}`,
+          sessionId,
+          requireHidden: settings.notificationMode !== 'always',
+        });
+
+        broadcastUiNotification({
+          kind: 'permission',
+          title,
+          body,
+          tag: requestKey ? `permission-${requestKey}` : `permission-${sessionId}`,
+          sessionId,
+          requireHidden: settings.notificationMode !== 'always',
+        });
+      });
+
       if (requestKey) {
         notifiedPermissionRequests.add(requestKey);
       }
@@ -3361,6 +3480,13 @@ async function main(options = {}) {
       res.flushHeaders();
     }
 
+    uiNotificationClients.add(res);
+    const cleanupClient = () => {
+      uiNotificationClients.delete(res);
+    };
+    req.on('close', cleanupClient);
+    req.on('error', cleanupClient);
+
     const heartbeatInterval = setInterval(() => {
       writeSseEvent(res, { type: 'openchamber:heartbeat', timestamp: Date.now() });
     }, 15000);
@@ -3375,7 +3501,6 @@ async function main(options = {}) {
 
 `);
       const payload = parseSseDataPayload(block);
-      void maybeSendPushForTrigger(payload);
       const activity = deriveSessionActivity(payload);
       if (activity) {
         setSessionActivityPhase(activity.sessionId, activity.phase);
@@ -3412,6 +3537,7 @@ async function main(options = {}) {
       }
     } finally {
       clearInterval(heartbeatInterval);
+      cleanupClient();
       cleanup();
       try {
         res.end();
@@ -3496,7 +3622,6 @@ async function main(options = {}) {
 
 `);
       const payload = parseSseDataPayload(block);
-      void maybeSendPushForTrigger(payload);
       const activity = deriveSessionActivity(payload);
       if (activity) {
         setSessionActivityPhase(activity.sessionId, activity.phase);

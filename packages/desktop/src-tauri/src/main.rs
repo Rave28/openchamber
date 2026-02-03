@@ -37,7 +37,7 @@ fn dispatch_check_for_updates<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let script = format!("window.dispatchEvent(new Event({event}));");
     eval_in_main_window(app, &script);
 }
-use tauri_plugin_shell::{process::CommandChild, ShellExt};
+use tauri_plugin_shell::{process::CommandChild, process::CommandEvent, ShellExt};
 use tauri_plugin_updater::UpdaterExt;
 
 #[cfg(target_os = "macos")]
@@ -368,6 +368,7 @@ fn desktop_set_auto_worktree_menu(app: tauri::AppHandle, enabled: bool) -> Resul
 }
 
 const SIDECAR_NAME: &str = "openchamber-server";
+const SIDECAR_NOTIFY_PREFIX: &str = "[OpenChamberDesktopNotify] ";
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(20);
 const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
@@ -375,6 +376,18 @@ const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(250);
 struct SidecarState {
     child: Mutex<Option<CommandChild>>,
     url: Mutex<Option<String>>,
+}
+
+struct WindowFocusState {
+    focused: Mutex<bool>,
+}
+
+impl Default for WindowFocusState {
+    fn default() -> Self {
+        Self {
+            focused: Mutex::new(true),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -418,6 +431,43 @@ fn pick_unused_port() -> Result<u16> {
 
 fn is_nonempty_string(value: &str) -> bool {
     !value.trim().is_empty()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SidecarNotifyPayload {
+    title: Option<String>,
+    body: Option<String>,
+    tag: Option<String>,
+    require_hidden: Option<bool>,
+}
+
+fn maybe_show_sidecar_notification(app: &tauri::AppHandle, payload: SidecarNotifyPayload) {
+    let require_hidden = payload.require_hidden.unwrap_or(false);
+    if require_hidden {
+        let focused = app
+            .try_state::<WindowFocusState>()
+            .map(|state| *state.focused.lock().expect("focus mutex"))
+            .unwrap_or(false);
+        if focused {
+            return;
+        }
+    }
+
+    let title = payload
+        .title
+        .filter(|t| is_nonempty_string(t))
+        .unwrap_or_else(|| "OpenChamber".to_string());
+    let body = payload.body.filter(|b| is_nonempty_string(b));
+    let _tag = payload.tag;
+
+    use tauri_plugin_notification::NotificationExt;
+
+    let mut builder = app.notification().builder().title(title);
+    if let Some(body) = body {
+        builder = builder.body(body);
+    }
+    let _ = builder.show();
 }
 
 async fn wait_for_health(url: &str) -> bool {
@@ -493,13 +543,45 @@ async fn spawn_local_server(app: &tauri::AppHandle) -> Result<String> {
         .args(["--port", &port.to_string()])
         .env("OPENCHAMBER_HOST", "127.0.0.1")
         .env("OPENCHAMBER_DIST_DIR", dist_dir)
+        .env("OPENCHAMBER_DESKTOP_NOTIFY", "true")
         .env("PATH", augmented_path)
         .env("NO_PROXY", no_proxy)
         .env("no_proxy", no_proxy);
 
-    let (_rx, child) = cmd
+    let (rx, child) = cmd
         .spawn()
         .map_err(|err| anyhow!("Failed to spawn sidecar '{SIDECAR_NAME}': {err}"))?;
+
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut rx = rx;
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(bytes) => {
+                    let line = String::from_utf8_lossy(&bytes);
+                    if let Some(rest) = line.strip_prefix(SIDECAR_NOTIFY_PREFIX) {
+                        if let Ok(parsed) =
+                            serde_json::from_str::<SidecarNotifyPayload>(rest.trim())
+                        {
+                            maybe_show_sidecar_notification(&app_handle, parsed);
+                        }
+                    }
+                }
+                CommandEvent::Error(error) => {
+                    log::warn!("[sidecar] error: {error}");
+                }
+                CommandEvent::Terminated(payload) => {
+                    log::warn!(
+                        "[sidecar] terminated code={:?} signal={:?}",
+                        payload.code,
+                        payload.signal
+                    );
+                    break;
+                }
+                _ => {}
+            }
+        }
+    });
 
     if let Some(state) = app.try_state::<SidecarState>() {
         *state.child.lock().expect("sidecar mutex") = Some(child);
@@ -748,6 +830,7 @@ fn main() {
 
     let builder = tauri::Builder::default()
         .manage(SidecarState::default())
+        .manage(WindowFocusState::default())
         .manage(MenuRuntimeState::default())
         .manage(PendingUpdate(Mutex::new(None)))
         .plugin(tauri_plugin_shell::init())
@@ -884,6 +967,14 @@ fn main() {
                 }
                 if id == MENU_ITEM_DOWNLOAD_LOGS_ID {
                     dispatch_menu_action(app, "download-logs");
+                }
+            }
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Focused(focused) = event {
+                let app = window.app_handle();
+                if let Some(state) = app.try_state::<WindowFocusState>() {
+                    *state.focused.lock().expect("focus mutex") = *focused;
                 }
             }
         })
