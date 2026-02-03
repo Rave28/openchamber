@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Session } from '@opencode-ai/sdk/v2';
 import { toast } from '@/components/ui';
+import { isTauriShell } from '@/lib/desktop';
 import {
   DndContext,
   DragOverlay,
@@ -135,7 +136,7 @@ interface SortableProjectItemProps {
   isActiveProject: boolean;
   isRepo: boolean;
   isHovered: boolean;
-  isDesktopRuntime: boolean;
+  isTauriShell: boolean;
   isStuck: boolean;
   hideDirectoryControls: boolean;
   mobileVariant: boolean;
@@ -161,7 +162,7 @@ const SortableProjectItem: React.FC<SortableProjectItemProps> = ({
   isActiveProject,
   isRepo,
   isHovered,
-  isDesktopRuntime,
+  isTauriShell,
   isStuck,
   hideDirectoryControls,
   mobileVariant,
@@ -190,7 +191,7 @@ const SortableProjectItem: React.FC<SortableProjectItemProps> = ({
   return (
     <div ref={setNodeRef} className={cn('relative', isDragging && 'opacity-40')}>
       {/* Sentinel for sticky detection */}
-      {isDesktopRuntime && (
+      {isTauriShell && (
         <div
           ref={sentinelRef}
           data-project-id={id}
@@ -203,10 +204,10 @@ const SortableProjectItem: React.FC<SortableProjectItemProps> = ({
       <div
         className={cn(
           'sticky top-0 z-10 pt-2 pb-1.5 w-full text-left cursor-pointer group/project border-b select-none',
-          !isDesktopRuntime && 'bg-sidebar',
+          !isTauriShell && 'bg-sidebar',
         )}
         style={{
-          backgroundColor: isDesktopRuntime
+          backgroundColor: isTauriShell
             ? isStuck ? 'var(--sidebar-stuck-bg)' : 'transparent'
             : undefined,
           borderColor: isHovered
@@ -462,12 +463,7 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
   const getSessionsByDirectory = useSessionStore((state) => state.getSessionsByDirectory);
   const openNewSessionDraft = useSessionStore((state) => state.openNewSessionDraft);
 
-  const [isDesktopRuntime, setIsDesktopRuntime] = React.useState<boolean>(() => {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-    return typeof window.opencodeDesktop !== 'undefined';
-  });
+  const isTauri = React.useMemo(() => isTauriShell(), []);
 
   const isVSCode = React.useMemo(() => isVSCodeRuntime(), []);
 
@@ -490,12 +486,7 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
     } catch { /* ignored */ }
   }, [safeStorage]);
 
-  React.useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    setIsDesktopRuntime(typeof window.opencodeDesktop !== 'undefined');
-  }, []);
+  const isTauriShellRuntime = isTauri;
 
   const sortedSessions = React.useMemo(() => {
     return [...sessions].sort((a, b) => (b.time?.updated || 0) - (a.time?.updated || 0));
@@ -863,31 +854,32 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
   );
 
   const handleOpenDirectoryDialog = React.useCallback(() => {
-    if (isDesktopRuntime && window.opencodeDesktop?.requestDirectoryAccess) {
-      window.opencodeDesktop
-        .requestDirectoryAccess('')
-        .then((result) => {
-          if (result.success && result.path) {
-            const added = addProject(result.path, { id: result.projectId });
-            if (!added) {
-              toast.error('Failed to add project', {
-                description: 'Please select a valid directory.',
-              });
-            }
-          } else if (result.error && result.error !== 'Directory selection cancelled') {
-            toast.error('Failed to select directory', {
-              description: result.error,
+    if (!isTauriShellRuntime) {
+      sessionEvents.requestDirectoryDialog();
+      return;
+    }
+
+    import('@/lib/desktop')
+      .then(({ requestDirectoryAccess }) => requestDirectoryAccess(''))
+      .then((result) => {
+        if (result.success && result.path) {
+          const added = addProject(result.path, { id: result.projectId });
+          if (!added) {
+            toast.error('Failed to add project', {
+              description: 'Please select a valid directory.',
             });
           }
-        })
-        .catch((error) => {
-          console.error('Desktop: Error selecting directory:', error);
-          toast.error('Failed to select directory');
-        });
-    } else {
-      sessionEvents.requestDirectoryDialog();
-    }
-  }, [addProject, isDesktopRuntime]);
+        } else if (result.error && result.error !== 'Directory selection cancelled') {
+          toast.error('Failed to select directory', {
+            description: result.error,
+          });
+        }
+      })
+      .catch((error) => {
+        console.error('Desktop: Error selecting directory:', error);
+        toast.error('Failed to select directory');
+      });
+  }, [addProject, isTauriShellRuntime]);
 
   const toggleParent = React.useCallback((sessionId: string) => {
     setExpandedParents((prev) => {
@@ -1081,7 +1073,7 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
 
   // Track when project sticky headers become "stuck"
   React.useEffect(() => {
-    if (!isDesktopRuntime) return;
+    if (!isTauriShellRuntime) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -1108,7 +1100,7 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
     });
 
     return () => observer.disconnect();
-  }, [isDesktopRuntime, projectSections]);
+  }, [isTauriShellRuntime, projectSections]);
 
   const renderSessionNode = React.useCallback(
     (node: SessionNode, depth = 0, groupDirectory?: string | null, projectId?: string | null): React.ReactNode => {
@@ -1571,7 +1563,7 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
               onClick={handleOpenDirectoryDialog}
               className={cn(
                 'inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-interactive-hover/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
-                !isDesktopRuntime && 'bg-sidebar/60 hover:bg-sidebar',
+                    !isTauriShellRuntime && 'bg-sidebar/60 hover:bg-sidebar',
               )}
               aria-label="Add project"
               title="Add project"
@@ -1650,7 +1642,7 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
                     isActiveProject={isActiveProject}
                     isRepo={Boolean(isRepo)}
                     isHovered={isHovered}
-                    isDesktopRuntime={isDesktopRuntime}
+                    isTauriShell={isTauriShellRuntime}
                     isStuck={stuckProjectHeaders.has(projectKey)}
                     hideDirectoryControls={hideDirectoryControls}
                     mobileVariant={mobileVariant}

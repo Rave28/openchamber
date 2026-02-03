@@ -6,7 +6,7 @@ import React, {
 } from 'react';
 import type { Theme, ThemeMode } from '@/types/theme';
 import type { DesktopSettings } from '@/lib/desktop';
-import { isDesktopRuntime, isVSCodeRuntime } from '@/lib/desktop';
+import { isTauriShell, isVSCodeRuntime } from '@/lib/desktop';
 import { CSSVariableGenerator } from '@/lib/theme/cssGenerator';
 import { updateDesktopSettings } from '@/lib/persistence';
 import {
@@ -190,7 +190,7 @@ export function ThemeSystemProvider({ children, defaultThemeId }: ThemeSystemPro
     return existing || null;
   });
   const isVSCode = useMemo(() => isVSCodeRuntime(), []);
-  const isDesktop = useMemo(() => isDesktopRuntime(), []);
+  const isDesktop = useMemo(() => isTauriShell(), []);
 
   const availableThemes = useMemo(() => {
     const merged: Theme[] = [];

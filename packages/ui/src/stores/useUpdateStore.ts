@@ -4,7 +4,7 @@ import {
   checkForDesktopUpdates,
   downloadDesktopUpdate,
   restartToApplyUpdate,
-  isDesktopRuntime,
+  isTauriShell,
   isWebRuntime,
 } from '@/lib/desktop';
 
@@ -55,7 +55,7 @@ async function checkForWebUpdates(): Promise<UpdateInfo | null> {
 }
 
 function detectRuntimeType(): 'desktop' | 'web' | 'vscode' | null {
-  if (isDesktopRuntime()) return 'desktop';
+  if (isTauriShell()) return 'desktop';
   if (isWebRuntime()) return 'web';
   return null;
 }

@@ -98,7 +98,7 @@ export const Header: React.FC = () => {
     if (typeof window === 'undefined') {
       return false;
     }
-    return typeof (window as typeof window & { opencodeDesktop?: unknown }).opencodeDesktop !== 'undefined';
+    return Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__);
   });
 
   const isMacPlatform = React.useMemo(() => {
@@ -112,11 +112,12 @@ export const Header: React.FC = () => {
     if (typeof window === 'undefined') {
       return null;
     }
-    // Use Tauri-provided version if available (accurate), otherwise fall back to UA parsing
-    const desktopApi = (window as typeof window & { opencodeDesktop?: { macosMajorVersion?: number | null } }).opencodeDesktop;
-    if (desktopApi?.macosMajorVersion != null) {
-      return desktopApi.macosMajorVersion;
+
+    const injected = (window as unknown as { __OPENCHAMBER_MACOS_MAJOR__?: unknown }).__OPENCHAMBER_MACOS_MAJOR__;
+    if (typeof injected === 'number' && Number.isFinite(injected) && injected > 0) {
+      return injected;
     }
+
     // Fallback: WebKit reports "Mac OS X 10_15_7" format where 10 is legacy prefix
     if (typeof navigator === 'undefined') {
       return null;
@@ -137,8 +138,7 @@ export const Header: React.FC = () => {
     if (typeof window === 'undefined') {
       return;
     }
-    const detected = typeof (window as typeof window & { opencodeDesktop?: unknown }).opencodeDesktop !== 'undefined';
-    setIsDesktopApp(detected);
+    setIsDesktopApp(Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__));
   }, []);
 
   const currentModel = getCurrentModel();

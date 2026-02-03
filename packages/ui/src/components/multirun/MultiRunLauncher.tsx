@@ -95,7 +95,7 @@ export const MultiRunLauncher: React.FC<MultiRunLauncherProps> = ({
     if (typeof window === 'undefined') {
       return false;
     }
-    return typeof (window as typeof window & { opencodeDesktop?: unknown }).opencodeDesktop !== 'undefined';
+    return Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__);
   });
 
   const isMacPlatform = React.useMemo(() => {
@@ -109,8 +109,7 @@ export const MultiRunLauncher: React.FC<MultiRunLauncherProps> = ({
     if (typeof window === 'undefined') {
       return;
     }
-    const detected = typeof (window as typeof window & { opencodeDesktop?: unknown }).opencodeDesktop !== 'undefined';
-    setIsDesktopApp(detected);
+    setIsDesktopApp(Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__));
   }, []);
 
   const desktopHeaderPaddingClass = React.useMemo(() => {

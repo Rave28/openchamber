@@ -42,7 +42,7 @@ export function OnboardingScreen({ onCliAvailable }: OnboardingScreenProps) {
   }, []);
 
   React.useEffect(() => {
-    setIsDesktopApp(typeof (window as typeof window & { opencodeDesktop?: unknown }).opencodeDesktop !== 'undefined');
+    setIsDesktopApp(typeof window !== 'undefined' && Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__));
   }, []);
 
   const handleDragStart = React.useCallback(async (e: React.MouseEvent) => {

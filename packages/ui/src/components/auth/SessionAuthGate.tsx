@@ -2,7 +2,7 @@ import React from 'react';
 import { RiLockLine, RiLockUnlockLine, RiLoader4Line } from '@remixicon/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { isDesktopRuntime, isVSCodeRuntime } from '@/lib/desktop';
+import { isVSCodeRuntime } from '@/lib/desktop';
 import { syncDesktopSettings, initializeAppearancePreferences } from '@/lib/persistence';
 import { applyPersistedDirectoryPreferences } from '@/lib/directoryPersistence';
 
@@ -119,9 +119,8 @@ const clearTokenFromUrl = () => {
 };
 
 export const SessionAuthGate: React.FC<SessionAuthGateProps> = ({ children }) => {
-  const desktopRuntime = React.useMemo(() => isDesktopRuntime(), []);
   const vscodeRuntime = React.useMemo(() => isVSCodeRuntime(), []);
-  const skipAuth = desktopRuntime || vscodeRuntime;
+  const skipAuth = vscodeRuntime;
   const [state, setState] = React.useState<GateState>(() => (skipAuth ? 'authenticated' : 'pending'));
   const [password, setPassword] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);

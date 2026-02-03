@@ -1,4 +1,3 @@
-import { getDesktopSettings, updateDesktopSettings as updateDesktopSettingsApi, isDesktopRuntime } from '@/lib/desktop';
 import type { DesktopSettings } from '@/lib/desktop';
 import { useUIStore } from '@/stores/useUIStore';
 import { useMessageQueueStore } from '@/stores/messageQueueStore';
@@ -473,9 +472,9 @@ export const syncDesktopSettings = async (): Promise<void> => {
   };
 
   try {
-    const settings = isDesktopRuntime() ? await getDesktopSettings() : await fetchWebSettings();
-    if (settings) {
-      applySettings(settings);
+    const webSettings = await fetchWebSettings();
+    if (webSettings) {
+      applySettings(webSettings);
     }
   } catch (error) {
     console.warn('Failed to synchronise settings:', error);
@@ -487,18 +486,7 @@ export const updateDesktopSettings = async (changes: Partial<DesktopSettings>): 
     return;
   }
 
-  if (isDesktopRuntime()) {
-    try {
-      const updated = await updateDesktopSettingsApi(changes);
-      if (updated) {
-        persistToLocalStorage(updated);
-        applyDesktopUiPreferences(updated);
-      }
-    } catch (error) {
-      console.warn('Failed to update desktop settings:', error);
-    }
-    return;
-  }
+  // Desktop shell uses the same HTTP settings API as web.
 
   const runtimeSettings = getRuntimeSettingsAPI();
   if (runtimeSettings) {

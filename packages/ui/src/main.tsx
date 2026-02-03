@@ -97,21 +97,3 @@ createRoot(rootElement).render(
     </ThemeSystemProvider>
   </StrictMode>,
 );
-
-if (typeof window !== 'undefined') {
-  const markRendererReady = () => {
-    try {
-      window.opencodeDesktop?.markRendererReady?.();
-    } catch (error) {
-      console.warn('Failed to notify desktop runtime that renderer is ready:', error);
-    }
-  };
-
-  markRendererReady();
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      markRendererReady();
-    }
-  });
-}

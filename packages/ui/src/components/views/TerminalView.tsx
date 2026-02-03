@@ -17,7 +17,7 @@ import { useUIStore } from '@/stores/useUIStore';
 import { Button } from '@/components/ui/button';
 import { useDeviceInfo } from '@/lib/device';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
-import { isDesktopRuntime, isWebRuntime } from '@/lib/desktop';
+import { isTauriShell, isWebRuntime } from '@/lib/desktop';
 
 const TERMINAL_FONT_SIZE = 13;
 
@@ -80,7 +80,7 @@ export const TerminalView: React.FC = () => {
     const { currentTheme } = useThemeSystem();
     const { monoFont } = useFontPreferences();
     const { isMobile, hasTouchInput } = useDeviceInfo();
-    const enableTabs = !isMobile && (isWebRuntime() || isDesktopRuntime());
+    const enableTabs = !isMobile && (isWebRuntime() || isTauriShell());
     const showTerminalQuickKeysOnDesktop = useUIStore((state) => state.showTerminalQuickKeysOnDesktop);
     const showQuickKeys = isMobile || showTerminalQuickKeysOnDesktop;
 

@@ -412,7 +412,7 @@ export const useEventStream = () => {
     (sessionId: string, reason: string, limit?: number) => Promise<void>
   >(() => Promise.resolve());
   const scheduleReconnectRef = React.useRef<(hint?: string) => void>(() => {});
-  const isDesktopRuntimeRef = React.useRef<boolean>(false);
+  const isTauriShellRef = React.useRef<boolean>(false);
 
   const maybeBootstrapIfStale = React.useCallback(
     (reason: string) => {
@@ -426,12 +426,8 @@ export const useEventStream = () => {
   );
 
   React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const apis = (window as typeof window & { __OPENCHAMBER_RUNTIME_APIS__?: { runtime?: { isDesktop?: boolean } } }).__OPENCHAMBER_RUNTIME_APIS__;
-      if (apis?.runtime?.isDesktop) {
-        isDesktopRuntimeRef.current = true;
-      }
-    }
+    if (typeof window === 'undefined') return;
+    isTauriShellRef.current = Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__);
   }, []);
 
   const sessionCooldownTimersRef = React.useRef<Map<string, NodeJS.Timeout>>(new Map());
@@ -783,7 +779,7 @@ export const useEventStream = () => {
       }
 
       case 'session.status':
-        if (isDesktopRuntimeRef.current) break;
+        if (isTauriShellRef.current) break;
         {
           const sessionId = typeof props.sessionID === 'string' ? props.sessionID : null;
           const statusObj = (typeof props.status === 'object' && props.status !== null) ? props.status as Record<string, unknown> : null;
@@ -926,7 +922,7 @@ export const useEventStream = () => {
           break;
         }
 
-        if (isDesktopRuntimeRef.current && streamDebugEnabled()) {
+        if (isTauriShellRef.current && streamDebugEnabled()) {
           try {
             const serverParts = (props as { parts?: unknown }).parts || (messageExt as { parts?: unknown }).parts || [];
             const textParts = Array.isArray(serverParts)
@@ -1138,7 +1134,7 @@ export const useEventStream = () => {
             break;
           }
 
-          if (isDesktopRuntimeRef.current) {
+          if (isTauriShellRef.current) {
             const zeroToleranceShrink = existingLen > 0 && incomingLen < existingLen;
             const hasUsefulText = partsArray.some((p) => {
               if (!p || p.type !== 'text') return false;
@@ -1168,7 +1164,7 @@ export const useEventStream = () => {
             { count: partsArray.length }
           );
 
-          const partsToInject = isDesktopRuntimeRef.current && (messageExt as { role?: unknown }).role === 'assistant'
+          const partsToInject = isTauriShellRef.current && (messageExt as { role?: unknown }).role === 'assistant'
             ? partsArray.filter((serverPart) => serverPart?.type !== 'text')
             : partsArray;
 
@@ -1213,7 +1209,7 @@ export const useEventStream = () => {
           const isActiveSession = currentSessionId === sessionId;
           if (isActiveSession && messageId !== latestAssistantMessageId) break;
 
-          if (!stopMarkerPresent && isDesktopRuntimeRef.current) {
+          if (!stopMarkerPresent && isTauriShellRef.current) {
             trackMessage(messageId, 'desktop_completion_without_stop');
             break;
           }
@@ -1344,7 +1340,7 @@ export const useEventStream = () => {
 
 	          // For web/vscode: trigger cooldown only when assistant message has finish === "stop"
 	          // to match desktop backend semantics.
-	          if (!isDesktopRuntimeRef.current) {
+	          if (!isTauriShellRef.current) {
 	            if (finish === 'stop') {
 	              const currentPhase = useSessionStore.getState().sessionActivityPhase?.get(sessionId);
 	              if (currentPhase === 'busy') {
@@ -1651,7 +1647,7 @@ export const useEventStream = () => {
   const debugConnectionState = React.useCallback(() => {
     if (streamDebugEnabled()) {
       console.debug('[useEventStream] Connection state:', {
-        isDesktopRuntime: isDesktopRuntimeRef.current,
+        isTauriShell: isTauriShellRef.current,
         hasUnsubscribe: Boolean(unsubscribeRef.current),
         currentSessionId: currentSessionIdRef.current,
         effectiveDirectory,
@@ -1708,7 +1704,7 @@ export const useEventStream = () => {
       return;
     }
 
-    if (isDesktopRuntimeRef.current) {
+    if (isTauriShellRef.current) {
       const bridgeReady = await waitForDesktopBridge();
       if (!bridgeReady) {
         console.warn('[useEventStream] Desktop bridge not ready, falling back to SDK');
@@ -1879,7 +1875,7 @@ export const useEventStream = () => {
     }
 
     let desktopActivityHandler: ((event: CustomEvent<{ sessionId?: string; phase?: string }>) => void) | null = null;
-    if (isDesktopRuntimeRef.current && typeof window !== 'undefined') {
+    if (isTauriShellRef.current && typeof window !== 'undefined') {
       desktopActivityHandler = (event: CustomEvent<{ sessionId?: string; phase?: string }>) => {
         const sessionId = typeof event.detail?.sessionId === 'string' ? event.detail.sessionId : null;
         const phase = typeof event.detail?.phase === 'string' ? event.detail.phase : null;

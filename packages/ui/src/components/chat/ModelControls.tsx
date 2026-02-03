@@ -37,7 +37,8 @@ import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { useIsDesktopRuntime, useIsVSCodeRuntime } from '@/hooks/useRuntimeAPIs';
+import { useIsVSCodeRuntime } from '@/hooks/useRuntimeAPIs';
+import { isTauriShell } from '@/lib/desktop';
 import { getAgentColor } from '@/lib/agentColors';
 import { useDeviceInfo } from '@/lib/device';
 import { getEditModeColors } from '@/lib/permissions/editModeColors';
@@ -339,7 +340,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
     const { favoriteModelsList, recentModelsList } = useModelLists();
 
     const { isMobile } = useDeviceInfo();
-    const isDesktopRuntime = useIsDesktopRuntime();
+    const isTauri = React.useMemo(() => isTauriShell(), []);
     const isVSCodeRuntime = useIsVSCodeRuntime();
     // Only use mobile panels on actual mobile devices, VSCode uses desktop dropdowns
     const isCompact = isMobile;
@@ -2360,7 +2361,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                         'model-controls__variant-label',
                                         controlTextSize,
                                         'font-medium min-w-0 truncate',
-                                        isDesktopRuntime ? 'max-w-[180px]' : undefined,
+                                        isTauri ? 'max-w-[180px]' : undefined,
                                         colorClass,
                                     )}
                                 >
@@ -2428,7 +2429,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                                 'model-controls__agent-label',
                                                 controlTextSize,
                                                 'font-medium min-w-0 truncate',
-                                                isDesktopRuntime ? 'max-w-[220px]' : undefined
+                                                isTauri ? 'max-w-[220px]' : undefined
                                             )}
                                             style={uiAgentName ? { color: `var(${getAgentColor(uiAgentName).var})` } : undefined}
                                         >

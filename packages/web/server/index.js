@@ -7470,7 +7470,14 @@ async function main(options = {}) {
     scheduleOpenCodeApiDetection();
   }
 
-  const distPath = path.join(__dirname, '..', 'dist');
+  const distPath = (() => {
+    const env = typeof process.env.OPENCHAMBER_DIST_DIR === 'string' ? process.env.OPENCHAMBER_DIST_DIR.trim() : '';
+    if (env) {
+      return path.resolve(env);
+    }
+    return path.join(__dirname, '..', 'dist');
+  })();
+
     if (fs.existsSync(distPath)) {
       console.log(`Serving static files from ${distPath}`);
       app.use(express.static(distPath, {
@@ -7494,13 +7501,17 @@ async function main(options = {}) {
 
   let activePort = port;
 
+  const bindHost = typeof process.env.OPENCHAMBER_HOST === 'string' && process.env.OPENCHAMBER_HOST.trim().length > 0
+    ? process.env.OPENCHAMBER_HOST.trim()
+    : null;
+
   await new Promise((resolve, reject) => {
     const onError = (error) => {
       server.off('error', onError);
       reject(error);
     };
     server.once('error', onError);
-    server.listen(port, async () => {
+    const onListening = async () => {
       server.off('error', onError);
       const addressInfo = server.address();
       activePort = typeof addressInfo === 'object' && addressInfo ? addressInfo.port : port;
@@ -7537,7 +7548,13 @@ async function main(options = {}) {
       }
 
       resolve();
-    });
+    };
+
+    if (bindHost) {
+      server.listen(port, bindHost, onListening);
+    } else {
+      server.listen(port, onListening);
+    }
   });
 
   if (attachSignals && !signalsAttached) {
