@@ -562,8 +562,8 @@ export const useEventStream = () => {
     }
     sessionStatusLastRefreshAtRef.current = now;
 
-    const applyStatusMap = (statusMap: Record<string, { type?: string }>) => {
-      const observed = new Set<string>();
+      const applyStatusMap = (statusMap: Record<string, { type?: string }>) => {
+        const observed = new Set<string>();
       // Use getState() to avoid sessions dependency which causes cascading updates
       const currentSessions = useSessionStore.getState().sessions;
       const knownSessionIds = new Set(currentSessions.map((session) => session.id));
@@ -571,8 +571,12 @@ export const useEventStream = () => {
       for (const [sessionId, raw] of Object.entries(statusMap)) {
         if (!sessionId || !raw) continue;
         observed.add(sessionId);
-        const phase: 'idle' | 'busy' =
-          raw.type === 'busy' || raw.type === 'retry' ? 'busy' : 'idle';
+        const phase: 'idle' | 'busy' | 'cooldown' =
+          raw.type === 'cooldown'
+            ? 'cooldown'
+            : raw.type === 'busy' || raw.type === 'retry'
+              ? 'busy'
+              : 'idle';
         updateSessionActivityPhase(sessionId, phase);
       }
 
