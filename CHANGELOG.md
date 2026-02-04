@@ -4,13 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.4] - 2026-02-04
+
+- **Intelligence Matrix**: Integrated 46 specialized skills, categorized by agent persona and indexed via `skills_manifest.json`.
+- **Vibe Dashboard**: New UI component in `packages/ui` for real-time swarm telemetry and heartbeat monitoring.
+- **Autonomous Workflows**: Introduced `/self-heal`, `/security-audit`, and `/sync-docs` workflows in `.agent/workflows`.
+- **Self-Healing**: Enabled autonomous recovery from build/test failures using the `self-healing-loop` skill.
+- **Hive Memory**: Established `.opencode/HIVE_MEMORY.md` for shared agent consciousness and global decision tracking.
+- **Infrastructure**: Added `npm run skills:sync` to automate skill index generation.
+
 ## [1.6.3] - 2026-02-2
 
 - Web: improved server readiness check to use the `/global/health` endpoint for more reliable startup detection.
 - Web: added login rate limit protection to prevent brute-force attempts on the authentication endpoint (thanks to @Jovines).
 - VSCode: improved server health check with the proper health API endpoint and increased timeout for steadier startup (thanks to @wienans).
 - Settings: dialog no longer persists open/closed state across app restarts.
-
 
 ## [1.6.2] - 2026-02-1
 
@@ -22,7 +30,6 @@ All notable changes to this project will be documented in this file.
 - Diff: optimized stacked view with worker-pool processing and lazy DOM rendering for smoother scrolling.
 - Worktrees: workspace path now resolves correctly when using git worktrees (thanks to @nelsonPires5).
 - Projects: fixed directory creation outside workspace in the Add Project modal (thanks to @nelsonPires5).
-
 
 ## [1.6.1] - 2026-01-30
 
@@ -36,7 +43,6 @@ All notable changes to this project will be documented in this file.
 - Git: commit message generation now includes untracked files and handles git diff --no-index comparisons more reliably (thanks to @MrLYC).
 - Desktop: improved macOS window chrome and header spacing, including steadier traffic lights on older macOS versions (thanks to @yulia-ivashko).
 
-
 ## [1.6.0] - 2026-01-29
 
 - Chat: added message stall detection with automatic soft resync for more reliable message delivery.
@@ -48,7 +54,6 @@ All notable changes to this project will be documented in this file.
 - Web: session activity tracking now works consistently across browser tabs.
 - Reliability: plans directory no longer errors when missing.
 
-
 ## [1.5.9] - 2026-01-28
 
 - Worktrees: migrated to Opencode SDK worktree implementation; sessions in worktrees are now completely isolated.
@@ -58,7 +63,6 @@ All notable changes to this project will be documented in this file.
 - Plans: switch between markdown preview and edit mode in the Plan view.
 - UI: Files, Diff, Git, and Terminal now follow the active session/worktree directory, including new-session drafts.
 - Web: plan lists no longer error when the plans directory is missing.
-
 
 ## [1.5.8] - 2026-01-26
 
@@ -72,13 +76,11 @@ All notable changes to this project will be documented in this file.
 - Activity: added a text-justification setting for activity summaries (thanks to @iyangdianfeng).
 - Reliability: file lists and message sends handle missing directories and transient errors more gracefully.
 
-
 ## [1.5.7] - 2026-01-24
 
 - GitHub: PR panel supports fork PR detection by branch name.
 - GitHub: Git tab PR panel can send failed checks/comments to chat with hidden context; added check details dialog with Actions step breakdown.
 - Web: GitHub auth flow fixes.
-
 
 ## [1.5.6] - 2026-01-24
 
@@ -88,7 +90,6 @@ All notable changes to this project will be documented in this file.
 - Git: manage pull requests in the Git view with AI-generated descriptions, status checks, ready-for-review, and merge actions.
 - Mobile: fixed CommandAutocomplete dropdown scrolling (thanks to @nelsonPires5).
 
-
 ## [1.5.5] - 2026-01-23
 
 - Navigation: URLs now sync the active session, tab, settings, and diff state for shareable links and reliable back/forward (thanks to @TaylorBeeston).
@@ -96,7 +97,6 @@ All notable changes to this project will be documented in this file.
 - Skills: installs now target plural directories while still recognizing legacy singular folders.
 - Web: push notifications no longer fire when a window is visible, avoiding duplicate alerts.
 - Web: improved push subscription handling across multiple windows for more reliable delivery.
-
 
 ## [1.5.4] - 2026-01-22
 
@@ -107,7 +107,6 @@ All notable changes to this project will be documented in this file.
 - Diff: large diffs now lazy-load to avoid freezes (thanks to @Jovines).
 - Web: added Background notifications for PWA.
 - Reliability: connect to external OpenCode servers without auto-start and fixed subagent crashes (thanks to @TaylorBeeston).
-
 
 ## [1.5.3] - 2026-01-20
 
@@ -121,7 +120,6 @@ All notable changes to this project will be documented in this file.
 - Git: generated commit messages now auto-pick a gitmoji when enabled (thanks to @TheRealAshik).
 - Performance: faster filesystem/search operations and general stability improvements (thanks to @TheRealAshik).
 
-
 ## [1.5.2] - 2026-01-17
 
 - Sessions: added branch picker dialog to start new worktree sessions from local branches (thanks to @nilskroe).
@@ -133,12 +131,10 @@ All notable changes to this project will be documented in this file.
 - VSCode: tuned layout breakpoint and server readiness timeout for steadier startup.
 - Reliability: improved OpenCode process cleanup to reduce orphaned servers.
 
-
 ## [1.5.1] - 2026-01-16
 
 - Desktop: fixed orphaned OpenCode processes not being cleaned up on restart or exit.
 - Opencode: fixed issue with reloading configuration was killing the app
-
 
 ## [1.5.0] - 2026-01-16
 
@@ -152,7 +148,6 @@ All notable changes to this project will be documented in this file.
 - Stability: fixed heartbeat race condition causing session stalls during long tasks (thanks to @tybradle).
 - Desktop: fixed commands for worktree setup access to PATH.
 
-
 ## [1.4.9] - 2026-01-14
 
 - VSCode: added session editor panel to view sessions alongside files.
@@ -160,7 +155,6 @@ All notable changes to this project will be documented in this file.
 - Diff: added stacked/inline diff mode toggle in settings with sidebar file navigation (thanks to @nelsonPires5).
 - Mobile: fixed iOS keyboard safe area padding for home indicator bar (thanks to @Jovines).
 - Upload: increased attachment size limit to 50MB with automatic image compression to 2048px for large files.
-
 
 ## [1.4.8] - 2026-01-14
 
@@ -173,12 +167,10 @@ All notable changes to this project will be documented in this file.
 - Reliability: improved project state preservation on validation failures (thanks to @vio1ator) and refined server health monitoring.
 - Stability: added graceful shutdown handling for the server process (thanks to @vio1ator).
 
-
 ## [1.4.7] - 2026-01-10
 
 - Skills: added ClawdHub integration as built-in market for skills.
 - Web: fixed issues in terminal
-
 
 ## [1.4.6] - 2026-01-09
 
@@ -186,7 +178,6 @@ All notable changes to this project will be documented in this file.
 - Input: removed auto-complete and auto-correction.
 - Shortcuts: switched agent cycling shortcut from Shift + TAB to TAB again.
 - Chat: added question tool support with a rich UI for interaction.
-
 
 ## [1.4.5] - 2026-01-08
 
@@ -197,7 +188,6 @@ All notable changes to this project will be documented in this file.
 - Compact: changed /summarize command to be /compact and use sdk for compaction.
 - MCP: added ability to dynamically enabled/disabled configured MCP.
 - Web: refactored project adding UI with autocomplete.
-
 
 ## [1.4.4] - 2026-01-08
 
@@ -214,14 +204,12 @@ All notable changes to this project will be documented in this file.
 - Tunnel: added QR code and password URL for Cloudflare tunnel (thanks to @martindonadieu).
 - Model selector: fixed dropdowns not responding to viewport size.
 
-
 ## [1.4.3] - 2026-01-04
 
 - VS Code extension: added Agent Manager panel to run the same prompt across up to 5 models in parallel (thanks to @wienans).
 - Added permission prompt UI for tools configured with "ask" in opencode.json, showing requested patterns and "Always Allow" options (thanks to @aptdnfapt).
 - Added "Open subAgent session" button on task tool outputs to quickly navigate to child sessions (thanks to @aptdnfapt).
 - VS Code extension: improved activation reliability and error handling.
-
 
 ## [1.4.2] - 2026-01-02
 
@@ -230,7 +218,6 @@ All notable changes to this project will be documented in this file.
 - Added fork button on user messages to create a new session from any point (thanks to @aptdnfapt).
 - Desktop app: keyboard shortcuts now use Cmd on macOS and Ctrl on web/other platforms (thanks to @sakhnyuk).
 - Migrated to OpenCode SDK v2 with improved API types and streaming.
-
 
 ## [1.4.1] - 2026-01-02
 
@@ -244,7 +231,6 @@ All notable changes to this project will be documented in this file.
 - Terminal: improved terminal performance and stability by switching to the Ghostty-based terminal renderer, while keeping the existing terminal UX and per-directory sessions.
 - Terminal: fixed several issues with terminal session restore and rendering under heavy output, including switching directories and long-running TUI apps.
 
-
 ## [1.4.0] - 2026-01-01
 
 - Added the ability to run multiple agents from a single prompt, with each agent working in an isolated worktree.
@@ -256,13 +242,11 @@ All notable changes to this project will be documented in this file.
 - Chat: now shows clearer error messages when agent messages fail.
 - Sidebar: improved readability for sticky headers with a dynamic background.
 
-
 ## [1.3.9] - 2025-12-30
 
- - Added skills management to settings with the ability to create, edit, and delete skills (make sure you have the latest OpenCode version for skills support).
+- Added skills management to settings with the ability to create, edit, and delete skills (make sure you have the latest OpenCode version for skills support).
 - Added Skills catalog functionality for discovering and installing skills from external sources.
 - VS Code extension: added right-click context menu with "Add to Context," "Explain," and "Improve Code" actions (thanks to @wienans).
-
 
 ## [1.3.8] - 2025-12-29
 
@@ -274,7 +258,6 @@ All notable changes to this project will be documented in this file.
 - Fixed scroll position persistence for active conversation turns across session switches.
 - Refactored Agents/Commands management with ability to configure project/user scopes.
 
-
 ## [1.3.7] - 2025-12-28
 
 - Redesigned Settings as a full-screen view with tabbed navigation.
@@ -284,12 +267,10 @@ All notable changes to this project will be documented in this file.
 - Improved session activity status handling and message step completion logic.
 - Introduced enchanced VSCode extension settings with dynamic layout based on width.
 
-
 ## [1.3.6] - 2025-12-27
 
 - Added the ability to manage (connect/disconnect) providers in settings.
 - Adjusted auto-summarization visuals in chat.
-
 
 ## [1.3.5] - 2025-12-26
 
@@ -302,13 +283,11 @@ All notable changes to this project will be documented in this file.
 - Added Discord links in the about section.
 - Added settings for choosing the default model/agent to start with in a new session.
 
-
 ## [1.3.4] - 2025-12-25
 
 - Diff view now loads reliably even with large files and slow networks.
 - Fixed getting diffs for worktree files.
 - VS Code extension: improved type checking and editor integration.
-
 
 ## [1.3.3] - 2025-12-25
 
@@ -320,12 +299,10 @@ All notable changes to this project will be documented in this file.
 - Chat UI: improved turn grouping/activity rendering and fixed message metadata/agent selection propagation.
 - Chat UI: improved agent activity status behavior and reduced image thumbnail sizes for better readability.
 
-
 ## [1.3.2] - 2025-12-22
 
 - Fixed new bug session when switching directories
 - Updated Opencode SDK to the latest version
-
 
 ## [1.3.1] - 2025-12-22
 
@@ -333,7 +310,6 @@ All notable changes to this project will be documented in this file.
 - The app opens to a new chat by default.
 - Fixed mobile and VSCode sessions handling
 - Updated app identity with new logo and icons across all platforms.
-
 
 ## [1.3.0] - 2025-12-21
 
@@ -345,20 +321,17 @@ All notable changes to this project will be documented in this file.
 - Adjusted VSCode extension theme mapping and model selection view.
 - Polished file autocomplete experience.
 
-
 ## [1.2.9] - 2025-12-20
 
 - Session auto‑cleanup feature with configurable retention for each app version including VSCode extension.
 - Ability to update web package from mobile/PWA view in setting.
 - A lot of different optimization for a long sessions.
 
-
 ## [1.2.8] - 2025-12-19
 
 - Introduced update mechanism for web version that doesn't need any cli interaction.
 - Added installation script for web version with package managed detection.
 - Update and restart of web server now support automatic pick-up of previously set parameters like port or password.
-
 
 ## [1.2.7] - 2025-12-19
 
@@ -367,13 +340,11 @@ All notable changes to this project will be documented in this file.
 - Improved theme consistency across dropdown menus, selects, and command palette.
 - Introduced keyboard shortcuts help menu and quick actions menu.
 
-
 ## [1.2.6] - 2025-12-19
 
 - Added write/create tool preview in permission cards with syntax highlighting.
 - More descriptive assistant status messages with tool-specific and varied idle phrases.
 - Polished Git view layout
-
 
 ## [1.2.5] - 2025-12-19
 
@@ -384,12 +355,10 @@ All notable changes to this project will be documented in this file.
 - Fixed untracked files in new directories not showing individually.
 - Smoother session rename experience.
 
-
 ## [1.2.4] - 2025-12-18
 
 - MacOS app menu entries for Check for update and for creating bug/request in Help section.
 - For Mobile added settings, improved terminal scrolling, fixed app layout positioning.
-
 
 ## [1.2.3] - 2025-12-17
 
@@ -398,19 +367,16 @@ All notable changes to this project will be documented in this file.
 - Optimized git polling and background diff+syntax pre-warm for instant Diff tab open.
 - Optomized reloading unaffected diffs.
 
-
 ## [1.2.2] - 2025-12-17
 
 - Agent Task tool now renders progressively with live duration and completed sub-tools summary.
 - Unified markdown rendering between assistant messages and tool outputs.
 - Reduced markdown header sizes for better visual balance.
 
-
 ## [1.2.1] - 2025-12-16
 
 - Todo task tracking: collapsible status row showing AI's current task and progress.
 - Switched "Detailed" tool output mode to only open the 'task', 'edit', 'multiedit', 'write', 'bash' tools for better performance.
-
 
 ## [1.2.0] - 2025-12-15
 
@@ -418,8 +384,7 @@ All notable changes to this project will be documented in this file.
 - Tool call expansion settings: collapsed, activity, or detailed modes.
 - Font size & spacing controls (50-200% scaling) in Appearance Settings.
 - Settings page access within VSCode extension.
-Thanks to @theblazehen for contributing these features!
-
+  Thanks to @theblazehen for contributing these features!
 
 ## [1.1.6] - 2025-12-15
 
@@ -427,13 +392,11 @@ Thanks to @theblazehen for contributing these features!
 - Improved mobile experience: simplified header, better diff file selector.
 - Redesigned password-protected session unlock screen.
 
-
 ## [1.1.5] - 2025-12-15
 
 - Enhanced file attachment features performance.
 - Added fuzzy search feature for file mentioning with @ in chat.
 - Optimized input area layout.
-
 
 ## [1.1.4] - 2025-12-15
 
@@ -441,12 +404,10 @@ Thanks to @theblazehen for contributing these features!
 - Enchanced VSCode extension theming with editor themes.
 - Fixed mobile view model/agent selection.
 
-
 ## [1.1.3] - 2025-12-14
 
 - Replaced Monaco diff editor with Pierre/diffs for better performance.
 - Added line wrap toggle in diff view with dynamic layout switching (auto-inline when narrow).
-
 
 ## [1.1.2] - 2025-12-13
 
@@ -455,12 +416,10 @@ Thanks to @theblazehen for contributing these features!
 - Removed redundant VS Code commands.
 - Enhanced UserTextPart styling.
 
-
 ## [1.1.1] - 2025-12-13
 
 - Adjusted model/agent selection alignment.
 - Fixed user message rendering issues.
-
 
 ## [1.1.0] - 2025-12-13
 
@@ -469,7 +428,6 @@ Thanks to @theblazehen for contributing these features!
 - Improved scroll performance with force flag and RAF placeholder.
 - Added git polling backoff optimization.
 
-
 ## [1.0.9] - 2025-12-08
 
 - Added directory picker on first launch to reduce macOS permission prompts.
@@ -477,24 +435,20 @@ Thanks to @theblazehen for contributing these features!
 - Improved update dialog UI with inline version display.
 - Added macOS folder access usage descriptions.
 
-
 ## [1.0.8] - 2025-12-08
 
 - Added fallback detection for OpenCode CLI in ~/.opencode/bin.
 - Added window focus after app restart/update.
 - Adapted traffic lights position and corner radius for older macOS versions.
 
-
 ## [1.0.7] - 2025-12-08
 
 - Optimized Opencode binary detection.
 - Adjusted app update experience.
 
-
 ## [1.0.6] - 2025-12-08
 
 - Enhance shell environment detection.
-
 
 ## [1.0.5] - 2025-12-07
 
@@ -502,22 +456,18 @@ Thanks to @theblazehen for contributing these features!
 - Fixed page refresh getting stuck on splash screen.
 - Disabled devtools and page refresh in production builds.
 
-
 ## [1.0.4] - 2025-12-07
 
 - Optimized desktop app start time
-
 
 ## [1.0.3] - 2025-12-07
 
 - Updated onboarding UI.
 - Updated sidebar styles.
 
-
 ## [1.0.2] - 2025-12-07
 
 - Updated MacOS window design to the latest one.
-
 
 ## [1.0.1] - 2025-12-07
 

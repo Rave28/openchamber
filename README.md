@@ -57,6 +57,14 @@ The whole project was built entirely with AI coding agents under my supervision.
 - Session auto-cleanup with configurable retention
 - Memory optimizations with LRU eviction
 
+### 🧠 Intelligence Layer (v1.6.4+)
+
+- **Specialized Swarm**: 46 distinct AI skills (Planner, Architect, VibeCoder, etc.) indexed via `skills_manifest.json`.
+- **Autonomous Workflows**: Trigger `/self-heal`, `/security-audit`, or `/sync-docs` for automated workspace maintenance.
+- **Vibe Dashboard**: Real-time telemetry dashboard for monitoring swarm health, heartbeats, and intelligence metrics.
+- **Hive Memory**: Persistent cross-agent consciousness for shared learning and architectural decision tracking.
+- **Zero-Trust Security**: Automated input sanitization and supply chain auditing integrated into agent reasoning.
+
 ### Web / PWA
 
 - Mobile-first UI with gestures and optimized terminal controls
@@ -80,9 +88,9 @@ The whole project was built entirely with AI coding agents under my supervision.
 
 Run OpenChamber remotely using GitHub Actions. No local computer required.
 
-*   **Zero Setup:** Runs on GitHub's infrastructure.
-*   **Persistence:** Optional; enabled when `OPENCODE_SERVER_PASSWORD` is set (encrypted).
-*   **Remote Access:** Access via secure tunnel (Cloudflare/Ngrok).
+- **Zero Setup:** Runs on GitHub's infrastructure.
+- **Persistence:** Optional; enabled when `OPENCODE_SERVER_PASSWORD` is set (encrypted).
+- **Remote Access:** Access via secure tunnel (Cloudflare/Ngrok).
 
 [**Read the Guide: OpenChamber for Actions**](docs/OPENCHAMBER_FOR_ACTIONS.md)
 
@@ -136,16 +144,19 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 ## Tech Stack
 
 ### Frontend
+
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat&logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-7-646CFF?style=flat&logo=vite&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=flat&logo=tailwindcss&logoColor=white)
 
 ### State & UI
+
 ![Zustand](https://img.shields.io/badge/Zustand-State_Management-FF6B6B?style=flat)
 ![Radix UI](https://img.shields.io/badge/Radix_UI-Components-8B5CF6?style=flat&logo=radixui&logoColor=white)
 
 ### Backend & Desktop
+
 ![Express](https://img.shields.io/badge/Express.js-Server-000000?style=flat&logo=express&logoColor=white)
 ![Tauri](https://img.shields.io/badge/Tauri-Desktop-FFC131?style=flat&logo=tauri&logoColor=white)
 ![OpenCode SDK](https://img.shields.io/badge/OpenCode-SDK-4F46E5?style=flat)
