@@ -1069,7 +1069,7 @@ fn create_main_window(app: &tauri::AppHandle, url: &str, local_origin: &str) -> 
 
         // Use marketing version (sw_vers), but map legacy 10.x to minor (10.15 -> 15).
         // This matches WebKit UA fallback logic in the UI.
-        if let Some(raw) = cmd_stdout("sw_vers", &["-productVersion"]) {
+        if let Some(raw) = cmd_stdout("/usr/bin/sw_vers", &["-productVersion"]).or_else(|| cmd_stdout("sw_vers", &["-productVersion"])) {
             let raw = raw.trim();
             let mut parts = raw.split('.');
             let major = parts.next().and_then(|v| v.parse::<u32>().ok())?;
@@ -1078,7 +1078,10 @@ fn create_main_window(app: &tauri::AppHandle, url: &str, local_origin: &str) -> 
         }
 
         // Fallback: derive from Darwin major (kern.osrelease major).
-        let raw = cmd_stdout("sysctl", &["-n", "kern.osrelease"]).or_else(|| cmd_stdout("uname", &["-r"]))?;
+        let raw = cmd_stdout("/usr/sbin/sysctl", &["-n", "kern.osrelease"])
+            .or_else(|| cmd_stdout("sysctl", &["-n", "kern.osrelease"]))
+            .or_else(|| cmd_stdout("/usr/bin/uname", &["-r"]))
+            .or_else(|| cmd_stdout("uname", &["-r"]))?;
         let raw = raw.trim();
         let major = raw.split('.').next()?.parse::<u32>().ok()?;
         if major >= 20 {
