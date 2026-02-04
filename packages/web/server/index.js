@@ -1163,6 +1163,11 @@ const sanitizeSettingsUpdate = (payload) => {
       Math.min(300000, Math.round(candidate.usageRefreshIntervalMs)),
     );
   }
+  if (Array.isArray(candidate.usageDropdownProviders)) {
+    result.usageDropdownProviders = normalizeStringArray(
+      candidate.usageDropdownProviders,
+    );
+  }
   if (typeof candidate.autoDeleteEnabled === "boolean") {
     result.autoDeleteEnabled = candidate.autoDeleteEnabled;
   }
@@ -1220,6 +1225,15 @@ const sanitizeSettingsUpdate = (payload) => {
     result.fontSize = Math.max(
       50,
       Math.min(200, Math.round(candidate.fontSize)),
+    );
+  }
+  if (
+    typeof candidate.terminalFontSize === "number" &&
+    Number.isFinite(candidate.terminalFontSize)
+  ) {
+    result.terminalFontSize = Math.max(
+      9,
+      Math.min(52, Math.round(candidate.terminalFontSize)),
     );
   }
   if (

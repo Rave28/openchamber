@@ -3,6 +3,7 @@ import type { ComponentType } from 'react';
 import {
     RiAiAgentLine,
     RiArrowDownSLine,
+    RiArrowGoBackLine,
     RiArrowRightSLine,
     RiBrainAi3Line,
     RiCheckLine,
@@ -255,6 +256,7 @@ interface ModelControlsProps {
     mobilePanel?: MobileControlsPanel;
     onMobilePanelChange?: (panel: MobileControlsPanel) => void;
     onMobilePanelSelection?: () => void;
+    onAgentPanelSelection?: () => void;
 }
 
 export const ModelControls: React.FC<ModelControlsProps> = ({
@@ -262,6 +264,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
     mobilePanel,
     onMobilePanelChange,
     onMobilePanelSelection,
+    onAgentPanelSelection,
 }) => {
     const {
         providers,
@@ -270,6 +273,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
         currentVariant,
         currentAgentName,
         settingsDefaultVariant,
+        settingsDefaultAgent,
         setProvider,
         setModel,
         setCurrentVariant,
@@ -336,6 +340,9 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
         isModelSelectorOpen,
         setModelSelectorOpen,
     } = useUIStore();
+
+    // Separate state for agent selector to avoid conflict with model selector
+    const [isAgentSelectorOpen, setIsAgentSelectorOpen] = React.useState(false);
     const { favoriteModelsList, recentModelsList } = useModelLists();
 
     const { isMobile } = useDeviceInfo();
@@ -385,12 +392,13 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
         }
     }, [activeMobilePanel]);
 
-    const prevAgentMenuOpenRef = React.useRef(agentMenuOpen);
+    // Handle model selector close behavior (separate from agent selector)
+    const prevModelSelectorOpenRef = React.useRef(isModelSelectorOpen);
     React.useEffect(() => {
-        const wasOpen = prevAgentMenuOpenRef.current;
-        prevAgentMenuOpenRef.current = agentMenuOpen;
+        const wasOpen = prevModelSelectorOpenRef.current;
+        prevModelSelectorOpenRef.current = isModelSelectorOpen;
 
-        if (!agentMenuOpen) {
+        if (!isModelSelectorOpen) {
             setDesktopModelQuery('');
             setModelSelectedIndex(0);
 
@@ -402,12 +410,47 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                 });
             }
         }
-    }, [agentMenuOpen, isCompact]);
+    }, [isModelSelectorOpen, isCompact]);
+
+    // Handle agent selector close behavior
+    const [agentSearchQuery, setAgentSearchQuery] = React.useState('');
+    React.useEffect(() => {
+        if (!isAgentSelectorOpen) {
+            setAgentSearchQuery('');
+            if (!isCompact) {
+                requestAnimationFrame(() => {
+                    const textarea = document.querySelector<HTMLTextAreaElement>('textarea[data-chat-input="true"]');
+                    textarea?.focus();
+                });
+            }
+        }
+    }, [isAgentSelectorOpen, isCompact]);
 
     // Reset selected index when search query changes
     React.useEffect(() => {
         setModelSelectedIndex(0);
     }, [desktopModelQuery]);
+
+    const sortedAndFilteredAgents = React.useMemo(() => {
+        const sorted = [...agents].sort((a, b) => a.name.localeCompare(b.name));
+        if (!agentSearchQuery.trim()) {
+            return sorted;
+        }
+        return sorted.filter((agent) =>
+            fuzzyMatch(agentSearchQuery, agent.name) ||
+            (agent.description && fuzzyMatch(agentSearchQuery, agent.description))
+        );
+    }, [agents, agentSearchQuery]);
+
+    const defaultAgentName = React.useMemo(() => {
+        if (settingsDefaultAgent) {
+            const found = agents.find(a => a.name === settingsDefaultAgent);
+            if (found) return found.name;
+        }
+        const buildAgent = agents.find(a => a.name === 'build');
+        if (buildAgent) return buildAgent.name;
+        return agents[0]?.name;
+    }, [settingsDefaultAgent, agents]);
 
     const currentAgent = React.useMemo(() => {
         if (uiAgentName) {
@@ -991,9 +1034,10 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
             }
             if (isCompact) {
                 closeMobilePanel();
-                if (onMobilePanelSelection) {
+                const callback = onAgentPanelSelection || onMobilePanelSelection;
+                if (callback) {
                     requestAnimationFrame(() => {
-                        onMobilePanelSelection();
+                        callback();
                     });
                 }
             }
@@ -1698,6 +1742,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                 className={cn(
                                     'flex w-full flex-col gap-1 rounded-xl border px-2 py-1.5 text-left',
                                     'focus:outline-none focus-visible:ring-1 focus-visible:ring-primary agent-list-item',
+                                    'touch-manipulation cursor-pointer',
                                     agentColor.class,
                                     isSelected ? 'active' : 'border-border/40'
                                 )}
@@ -2408,7 +2453,7 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
             return (
                 <div className="flex items-center gap-2 min-w-0">
                     <Tooltip delayDuration={1000}>
-                        <DropdownMenu>
+                        <DropdownMenu open={isAgentSelectorOpen} onOpenChange={setIsAgentSelectorOpen}>
                             <TooltipTrigger asChild>
                                 <DropdownMenuTrigger asChild>
                                     <div className={cn(
@@ -2437,29 +2482,66 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                     </div>
                                 </DropdownMenuTrigger>
                             </TooltipTrigger>
-                            <DropdownMenuContent align="end" alignOffset={-40} className="w-[min(280px,calc(100vw-2rem))]">
-                                {agents.filter(agent => isPrimaryMode(agent.mode)).map((agent) => (
-                                    <DropdownMenuItem
-                                        key={agent.name}
-                                        className="typography-meta"
-                                        onSelect={() => handleAgentChange(agent.name)}
-                                    >
-                                        <div className="flex flex-col gap-0.5">
-                                            <div className="flex items-center gap-1.5">
-                                                <div className={cn(
-                                                    'h-1 w-1 rounded-full agent-dot',
-                                                    getAgentColor(agent.name).class
-                                                )} />
-                                                <span className="font-medium">{capitalizeAgentName(agent.name)}</span>
+                            <DropdownMenuContent align="end" alignOffset={-40} className="w-[min(280px,calc(100vw-2rem))] p-0 flex flex-col">
+                                <div className="p-2 border-b border-border/40">
+                                    <div className="relative">
+                                        <RiSearchLine className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                                        <Input
+                                            type="text"
+                                            placeholder="Search agents"
+                                            value={agentSearchQuery}
+                                            onChange={(e) => setAgentSearchQuery(e.target.value)}
+                                            className="pl-8 h-8 typography-meta"
+                                            autoFocus
+                                        />
+                                    </div>
+                                </div>
+                                <ScrollableOverlay outerClassName="max-h-[min(400px,calc(100dvh-12rem))] flex-1">
+                                    <div className="p-1">
+                                        {!agentSearchQuery.trim() && defaultAgentName && (
+                                            <>
+                                                <DropdownMenuItem
+                                                    className="typography-meta"
+                                                    onSelect={() => handleAgentChange(defaultAgentName)}
+                                                >
+                                                    <div className="flex items-center gap-1.5">
+                                                        <RiArrowGoBackLine className="h-3.5 w-3.5 text-muted-foreground" />
+                                                        <span className="font-medium">Reset to default</span>
+                                                    </div>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                            </>
+                                        )}
+                                        {sortedAndFilteredAgents.length === 0 ? (
+                                            <div className="px-2 py-4 text-center typography-meta text-muted-foreground">
+                                                No agents found
                                             </div>
-                                            {agent.description && (
-                                                <span className="typography-meta text-muted-foreground max-w-[200px] ml-2.5 break-words">
-                                                    {agent.description}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </DropdownMenuItem>
-                                ))}
+                                        ) : (
+                                            sortedAndFilteredAgents.map((agent) => (
+                                                <DropdownMenuItem
+                                                    key={agent.name}
+                                                    className="typography-meta"
+                                                    onSelect={() => handleAgentChange(agent.name)}
+                                                >
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <div className={cn(
+                                                                'h-1 w-1 rounded-full agent-dot',
+                                                                getAgentColor(agent.name).class
+                                                            )} />
+                                                            <span className="font-medium">{capitalizeAgentName(agent.name)}</span>
+                                                        </div>
+                                                        {agent.description && (
+                                                            <span className="typography-meta text-muted-foreground max-w-[200px] ml-2.5 break-words">
+                                                                {agent.description}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </DropdownMenuItem>
+                                            ))
+                                        )}
+                                    </div>
+                                </ScrollableOverlay>
                                 <DropdownMenuSeparator />
                                 <div className="flex flex-col gap-1 px-1 py-0.5">
                                     <div className="rounded-xl bg-transparent">

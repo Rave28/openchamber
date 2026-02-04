@@ -57,6 +57,8 @@ export type DesktopSettings = {
   notifyOnSubtasks?: boolean;
   usageAutoRefresh?: boolean;
   usageRefreshIntervalMs?: number;
+  usageDisplayMode?: 'usage' | 'remaining';
+  usageDropdownProviders?: string[];
   autoDeleteEnabled?: boolean;
   autoDeleteAfterDays?: number;
   defaultModel?: string; // format: "provider/model"
@@ -68,6 +70,7 @@ export type DesktopSettings = {
   gitmojiEnabled?: boolean;
   toolCallExpansion?: 'collapsed' | 'activity' | 'detailed';
   fontSize?: number;
+  terminalFontSize?: number;
   padding?: number;
   cornerRadius?: number;
   inputBarOffset?: number;
