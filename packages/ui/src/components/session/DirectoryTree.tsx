@@ -12,7 +12,6 @@ import { RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiCheckLine, RiCloseLin
 import { cn, formatPathForDisplay } from '@/lib/utils';
 import { opencodeClient } from '@/lib/opencode/client';
 import { useDeviceInfo } from '@/lib/device';
-import { isTauriShell } from '@/lib/desktop';
 import type { DesktopSettings } from '@/lib/desktop';
 import { updateDesktopSettings } from '@/lib/persistence';
 import { useFileSystemAccess } from '@/hooks/useFileSystemAccess';
@@ -54,7 +53,6 @@ export const DirectoryTree: React.FC<DirectoryTreeProps> = ({
   isRootReady,
   alwaysShowActions = false,
 }) => {
-  const desktopRuntime = React.useMemo(() => isTauriShell(), []);
   const { isMobile } = useDeviceInfo();
   const [directories, setDirectories] = React.useState<DirectoryItem[]>([]);
   const [expandedPaths, setExpandedPaths] = React.useState<Set<string>>(new Set());
@@ -282,7 +280,7 @@ export const DirectoryTree: React.FC<DirectoryTreeProps> = ({
       cancelled = true;
       window.removeEventListener('openchamber:settings-synced', handleSettingsSynced);
     };
-  }, [desktopRuntime, stripTrailingSlashes]);
+  }, [stripTrailingSlashes]);
 
   const isInitialPinnedSync = React.useRef(true);
 

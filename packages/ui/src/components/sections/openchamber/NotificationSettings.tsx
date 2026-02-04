@@ -1,6 +1,6 @@
 import React from 'react';
 import { useUIStore } from '@/stores/useUIStore';
-import { isTauriShell, isVSCodeRuntime } from '@/lib/desktop';
+import { isDesktopShell, isVSCodeRuntime } from '@/lib/desktop';
 import { Switch } from '@/components/ui/switch';
 import { toast } from '@/components/ui';
 import { getRegisteredRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
@@ -8,9 +8,9 @@ import { getRegisteredRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { GridLoader } from '@/components/ui/grid-loader';
 
 export const NotificationSettings: React.FC = () => {
-  const isTauri = React.useMemo(() => isTauriShell(), []);
+  const isDesktop = React.useMemo(() => isDesktopShell(), []);
   const isVSCode = React.useMemo(() => isVSCodeRuntime(), []);
-  const isBrowser = !isTauri && !isVSCode;
+  const isBrowser = !isDesktop && !isVSCode;
   const nativeNotificationsEnabled = useUIStore(state => state.nativeNotificationsEnabled);
   const setNativeNotificationsEnabled = useUIStore(state => state.setNativeNotificationsEnabled);
   const notificationMode = useUIStore(state => state.notificationMode);
@@ -63,7 +63,7 @@ export const NotificationSettings: React.FC = () => {
   }, [isBrowser]);
 
   const handleToggleChange = async (checked: boolean) => {
-    if (isTauri) {
+    if (isDesktop) {
       setNativeNotificationsEnabled(checked);
       return;
     }
@@ -94,7 +94,7 @@ export const NotificationSettings: React.FC = () => {
     }
   };
 
-  const canShowNotifications = isTauri || (isBrowser && typeof Notification !== 'undefined' && Notification.permission === 'granted');
+  const canShowNotifications = isDesktop || (isBrowser && typeof Notification !== 'undefined' && Notification.permission === 'granted');
 
   const base64UrlToUint8Array = (base64Url: string): Uint8Array<ArrayBuffer> => {
     const padding = '='.repeat((4 - (base64Url.length % 4)) % 4);
