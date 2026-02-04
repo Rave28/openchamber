@@ -707,6 +707,11 @@ fn maybe_show_sidecar_notification(app: &tauri::AppHandle, payload: SidecarNotif
     if let Some(body) = body {
         builder = builder.body(body);
     }
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.sound("Glass");
+    }
     let _ = builder.show();
 }
 
@@ -965,6 +970,11 @@ fn desktop_notify(
         if is_nonempty_string(&tag) {
             let _ = tag;
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.sound("Glass");
     }
 
     builder.show().map(|_| true).map_err(|err| err.to_string())
