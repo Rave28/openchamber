@@ -266,14 +266,7 @@ export const ChatContainer: React.FC = () => {
                     <ScrollShadow
                         className="absolute inset-0 overflow-y-auto overflow-x-hidden z-0 chat-scroll overlay-scrollbar-target"
                         ref={scrollRef}
-                        style={{
-                            contain: 'strict',
-                            ['--scroll-shadow-size' as string]: '48px',
-                            // GPU acceleration hints for smoother scrolling
-                            transform: 'translateZ(0)',
-                            willChange: 'scroll-position',
-                            backfaceVisibility: 'hidden',
-                        }}
+                        observeMutations={false}
                         data-scroll-shadow="true"
                         data-scrollbar="chat"
                     >
