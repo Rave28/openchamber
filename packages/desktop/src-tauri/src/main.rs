@@ -1045,7 +1045,6 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
         .plugin(log_builder.build())
         .on_page_load(|window, _payload| {
             if let Some(state) = window.app_handle().try_state::<DesktopUiInjectionState>() {

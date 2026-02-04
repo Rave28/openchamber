@@ -98,6 +98,28 @@ export const isTauriShell = (): boolean => {
   return typeof tauri?.core?.invoke === 'function';
 };
 
+const normalizeOrigin = (raw: string): string | null => {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed).origin;
+  } catch {
+    try {
+      return new URL(trimmed.endsWith('/') ? trimmed : `${trimmed}/`).origin;
+    } catch {
+      return null;
+    }
+  }
+};
+
+export const isDesktopLocalOriginActive = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const local = typeof window.__OPENCHAMBER_LOCAL_ORIGIN__ === 'string' ? window.__OPENCHAMBER_LOCAL_ORIGIN__ : '';
+  const localOrigin = normalizeOrigin(local);
+  const currentOrigin = normalizeOrigin(window.location.origin) || window.location.origin;
+  return Boolean(localOrigin && currentOrigin && localOrigin === currentOrigin);
+};
+
 // Desktop shell detection that doesn't require Tauri IPC availability.
 // (Remote pages can temporarily lose window.__TAURI__ if URL doesn't match remote allowlist.)
 export const isDesktopShell = (): boolean => {
@@ -202,7 +224,7 @@ export const sendAssistantCompletionNotification = async (
 };
 
 export const checkForDesktopUpdates = async (): Promise<UpdateInfo | null> => {
-  if (!isTauriShell()) {
+  if (!isTauriShell() || !isDesktopLocalOriginActive()) {
     return null;
   }
 
@@ -219,7 +241,7 @@ export const checkForDesktopUpdates = async (): Promise<UpdateInfo | null> => {
 export const downloadDesktopUpdate = async (
   onProgress?: (progress: UpdateProgress) => void
 ): Promise<boolean> => {
-  if (!isTauriShell()) {
+  if (!isTauriShell() || !isDesktopLocalOriginActive()) {
     return false;
   }
 
@@ -279,7 +301,7 @@ export const downloadDesktopUpdate = async (
 };
 
 export const restartToApplyUpdate = async (): Promise<boolean> => {
-  if (!isTauriShell()) {
+  if (!isTauriShell() || !isDesktopLocalOriginActive()) {
     return false;
   }
 
