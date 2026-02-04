@@ -7,6 +7,8 @@ const MERGE_STRATEGY = {
   VOTING: "voting",
   MANUAL: "manual",
   UNION: "union",
+  KEEP_OURS: "keep-ours",
+  KEEP_THEIRS: "keep-theirs",
 };
 
 const CONSOLIDATION_STATE_FILE = path.join(
@@ -510,7 +512,7 @@ export const analyzeResults = async (consolidationId, agentResults) => {
   return preview;
 };
 
-export const resolveConflicts = async (consolidationId, resolutions) => {
+export const resolveConflicts = async (consolidationId, resolutions, strategyOverride) => {
   const state = await readConsolidationState();
   const consolidationIndex = state.consolidations.findIndex(
     (c) => c.id === consolidationId,
@@ -521,34 +523,45 @@ export const resolveConflicts = async (consolidationId, resolutions) => {
   }
 
   const consolidation = state.consolidations[consolidationIndex];
-
-  const mergePlan = {
-    consolidationId,
-    strategy: consolidation.strategy,
-    resolutions,
-    filesToMerge: [],
-    filesToReject: [],
+  const strategy = strategyOverride || consolidation.strategy;
+  const results = {
+    merged: [],
+    failed: [],
+    errors: [],
   };
 
-  for (const resolution of resolutions) {
-    if (resolution.action === "merge") {
-      mergePlan.filesToMerge.push({
-        path: resolution.path,
-        sourceAgent: resolution.sourceAgent,
-        sourceBranch: resolution.sourceBranch,
-      });
-    } else if (resolution.action === "reject") {
-      mergePlan.filesToReject.push({
-        path: resolution.path,
-      });
-    }
+  const mergedContent = await applyMergeStrategy(
+    consolidation.projectDirectory,
+    consolidation.baseBranch,
+    strategy,
+    {
+      filesToMerge: resolutions.filter((r) => r.action === "merge"),
+      filesToReject: resolutions.filter((r) => r.action === "reject"),
+    },
+    [],
+  );
+
+  results.merged.push(...mergedContent.mergedFiles);
+
+  const commitMessage = `Merge agent results from consolidation ${consolidationId}\n\nAgents involved: ${consolidation.agentIds.join(", ")}\nStrategy: ${strategy}`;
+
+  try {
+    await commit(consolidation.projectDirectory, commitMessage, { addAll: true });
+  } catch (error) {
+    console.error("[result-consolidator] Failed to commit merge:", error);
+    results.errors.push({ error: error.message });
   }
 
-  state.consolidations[consolidationIndex].status = "ready";
-  state.consolidations[consolidationIndex].mergePlan = mergePlan;
+  state.consolidations[consolidationIndex].status = "completed";
+  state.consolidations[consolidationIndex].completedAt = Date.now();
+  state.consolidations[consolidationIndex].mergeResult = results;
   await writeConsolidationState(state);
 
-  return mergePlan;
+  console.log(
+    `[result-consolidator] Merge completed for consolidation: ${consolidationId}`,
+  );
+
+  return results;
 };
 
 export const executeMerge = async (consolidationId, targetBranch) => {
@@ -624,6 +637,114 @@ export const executeMerge = async (consolidationId, targetBranch) => {
   );
 
   return results;
+};
+
+const applyMergeStrategy = async (
+  projectDirectory,
+  baseBranch,
+  strategy,
+  mergePlan,
+  conflicts,
+) => {
+  const mergedFiles = [];
+
+  try {
+    const repoDir = path.normalize(projectDirectory);
+    const { spawn: gitSpawn } = await import("child_process");
+
+    for (const fileToMerge of mergePlan.filesToMerge) {
+      let mergedContent = "";
+
+      switch (strategy) {
+        case MERGE_STRATEGY.KEEP_OURS:
+          mergedContent = fileToMerge.sourceAgent || "";
+          break;
+
+        case MERGE_STRATEGY.KEEP_THEIRS:
+          const theirsAgent = mergePlan.filesToMerge.find(
+            (f) => f.path === fileToMerge.path && f.sourceAgent !== fileToMerge.sourceAgent,
+          );
+          mergedContent = theirsAgent?.sourceAgent || "";
+          break;
+
+        case MERGE_STRATEGY.VOTING:
+          const samePathFiles = mergePlan.filesToMerge.filter(
+            (f) => f.path === fileToMerge.path,
+          );
+          const votes = samePathFiles.map((f) => f.sourceAgent || "");
+          mergedContent = votes.reduce((mostVoted, vote) => {
+            const count = votes.filter((v) => v === vote).length;
+            return count > (mostVoted.count || 0) ? vote : mostVoted.agent;
+          }, "").agent || "";
+          break;
+
+        case MERGE_STRATEGY.UNION:
+          const unionAgents = mergePlan.filesToMerge.filter(
+            (f) => f.path === fileToMerge.path,
+          );
+          const allChanges = unionAgents.map((f) => f.sourceAgent || "").join("\n");
+          const uniqueChanges = [...new Set(allChanges.split("\n"))].join("\n");
+          mergedContent = uniqueChanges;
+          break;
+
+        case MERGE_STRATEGY.MANUAL:
+          mergedContent = fileToMerge.sourceAgent || "";
+          break;
+
+        default:
+          console.warn(`[result-consolidator] Unknown strategy: ${strategy}`);
+          mergedContent = fileToMerge.sourceAgent || "";
+          break;
+      }
+
+      if (mergedContent) {
+        const filePath = path.join(repoDir, fileToMerge.path);
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.writeFile(filePath, mergedContent, "utf8");
+
+        try {
+          await new Promise((resolve, reject) => {
+            const gitAdd = gitSpawn("git", ["add", fileToMerge.path], {
+              cwd: repoDir,
+            });
+            gitAdd.on("close", resolve);
+            gitAdd.on("error", reject);
+          });
+        } catch (addError) {
+          console.warn(`[result-consolidator] Git add failed for ${fileToMerge.path}:`, addError.message);
+        }
+
+        mergedFiles.push({
+          path: fileToMerge.path,
+          strategy: strategy,
+          content: mergedContent,
+          mergedAt: Date.now(),
+        });
+      }
+    }
+
+    const rejectedPaths = mergePlan.filesToReject.map((f) => f.path);
+
+    console.log(
+      `[result-consolidator] Applied strategy ${strategy}: ${mergedFiles.length} files merged, ${rejectedPaths.length} rejected`,
+    );
+
+    return {
+      success: true,
+      mergedFiles,
+      rejectedFiles: rejectedPaths,
+      strategy,
+    };
+  } catch (error) {
+    console.error("[result-consolidator] Failed to apply merge strategy:", error);
+    return {
+      success: false,
+      mergedFiles: [],
+      rejectedFiles: mergePlan.filesToReject.map((f) => f.path),
+      strategy,
+      error: error.message,
+    };
+  }
 };
 
 export const getConsolidation = async (consolidationId) => {
