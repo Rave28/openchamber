@@ -1530,20 +1530,25 @@ const sessionActivityCooldowns = new Map(); // sessionId -> timeoutId
 const SESSION_COOLDOWN_DURATION_MS = 2000;
 
 const setSessionActivityPhase = (sessionId, phase) => {
-  if (!sessionId || typeof sessionId !== 'string') return;
-  
-  // Cancel existing cooldown timer
+  if (!sessionId || typeof sessionId !== 'string') return false;
+
+  const current = sessionActivityPhases.get(sessionId);
+  if (current?.phase === phase) return false; // No change
+
+  // Match desktop semantics: only enter cooldown from busy.
+  if (phase === 'cooldown' && current?.phase !== 'busy') {
+    return false;
+  }
+
+  // Cancel existing cooldown timer only on phase change.
   const existingTimer = sessionActivityCooldowns.get(sessionId);
   if (existingTimer) {
     clearTimeout(existingTimer);
     sessionActivityCooldowns.delete(sessionId);
   }
-  
-  const current = sessionActivityPhases.get(sessionId);
-  if (current?.phase === phase) return; // No change
-  
+
   sessionActivityPhases.set(sessionId, { phase, updatedAt: Date.now() });
-  
+
   // Schedule transition from cooldown to idle
   if (phase === 'cooldown') {
     const timer = setTimeout(() => {
@@ -1555,6 +1560,8 @@ const setSessionActivityPhase = (sessionId, phase) => {
     }, SESSION_COOLDOWN_DURATION_MS);
     sessionActivityCooldowns.set(sessionId, timer);
   }
+
+  return true;
 };
 
 const getSessionActivitySnapshot = () => {
@@ -1813,9 +1820,11 @@ const startGlobalEventWatcher = async () => {
             const payload = parseSseDataPayload(block);
             void maybeSendPushForTrigger(payload);
             // Track session activity independently of UI (mirrors Tauri desktop behavior)
-            const activity = deriveSessionActivity(payload);
-            if (activity) {
-              setSessionActivityPhase(activity.sessionId, activity.phase);
+            const transitions = deriveSessionActivityTransitions(payload);
+            if (transitions && transitions.length > 0) {
+              for (const activity of transitions) {
+                setSessionActivityPhase(activity.sessionId, activity.phase);
+              }
             }
           }
         }
@@ -2100,9 +2109,32 @@ function broadcastUiNotification(payload) {
   }
 }
 
-function deriveSessionActivity(payload) {
+function isStreamingAssistantPart(properties) {
+  if (!properties || typeof properties !== 'object') {
+    return false;
+  }
+
+  const info = properties?.info;
+  const role = info?.role;
+  if (role !== 'assistant') {
+    return false;
+  }
+
+  const part = properties?.part;
+  const partType = part?.type;
+  return (
+    partType === 'step-start' ||
+    partType === 'text' ||
+    partType === 'tool' ||
+    partType === 'reasoning' ||
+    partType === 'file' ||
+    partType === 'patch'
+  );
+}
+
+function deriveSessionActivityTransitions(payload) {
   if (!payload || typeof payload !== 'object') {
-    return null;
+    return [];
   }
 
   if (payload.type === 'session.status') {
@@ -2112,7 +2144,7 @@ function deriveSessionActivity(payload) {
 
     if (typeof sessionId === 'string' && sessionId.length > 0 && typeof statusType === 'string') {
       const phase = statusType === 'busy' || statusType === 'retry' ? 'busy' : 'idle';
-      return { sessionId, phase };
+      return [{ sessionId, phase }];
     }
   }
 
@@ -2122,7 +2154,7 @@ function deriveSessionActivity(payload) {
     const role = info?.role;
     const finish = info?.finish;
     if (typeof sessionId === 'string' && sessionId.length > 0 && role === 'assistant' && finish === 'stop') {
-      return { sessionId, phase: 'cooldown' };
+      return [{ sessionId, phase: 'cooldown' }];
     }
   }
 
@@ -2131,19 +2163,32 @@ function deriveSessionActivity(payload) {
     const sessionId = info?.sessionID ?? info?.sessionId ?? payload.properties?.sessionID ?? payload.properties?.sessionId;
     const role = info?.role;
     const finish = info?.finish;
-    if (typeof sessionId === 'string' && sessionId.length > 0 && role === 'assistant' && finish === 'stop') {
-      return { sessionId, phase: 'cooldown' };
+
+    if (typeof sessionId === 'string' && sessionId.length > 0 && role === 'assistant') {
+      const transitions = [];
+
+      // Desktop parity: mark busy when we see assistant parts streaming.
+      if (isStreamingAssistantPart(payload.properties)) {
+        transitions.push({ sessionId, phase: 'busy' });
+      }
+
+      // Desktop parity: enter cooldown when finish==stop.
+      if (finish === 'stop') {
+        transitions.push({ sessionId, phase: 'cooldown' });
+      }
+
+      return transitions;
     }
   }
 
   if (payload.type === 'session.idle') {
     const sessionId = payload.properties?.sessionID ?? payload.properties?.sessionId;
     if (typeof sessionId === 'string' && sessionId.length > 0) {
-      return { sessionId, phase: 'idle' };
+      return [{ sessionId, phase: 'idle' }];
     }
   }
 
-  return null;
+  return [];
 }
 
 const PUSH_READY_COOLDOWN_MS = 5000;
@@ -3501,16 +3546,19 @@ async function main(options = {}) {
 
 `);
       const payload = parseSseDataPayload(block);
-      const activity = deriveSessionActivity(payload);
-      if (activity) {
-        setSessionActivityPhase(activity.sessionId, activity.phase);
-        writeSseEvent(res, {
-          type: 'openchamber:session-activity',
-          properties: {
-            sessionId: activity.sessionId,
-            phase: activity.phase,
+      const transitions = deriveSessionActivityTransitions(payload);
+      if (transitions && transitions.length > 0) {
+        for (const activity of transitions) {
+          if (setSessionActivityPhase(activity.sessionId, activity.phase)) {
+            writeSseEvent(res, {
+              type: 'openchamber:session-activity',
+              properties: {
+                sessionId: activity.sessionId,
+                phase: activity.phase,
+              }
+            });
           }
-        });
+        }
       }
     };
 
@@ -3622,16 +3670,19 @@ async function main(options = {}) {
 
 `);
       const payload = parseSseDataPayload(block);
-      const activity = deriveSessionActivity(payload);
-      if (activity) {
-        setSessionActivityPhase(activity.sessionId, activity.phase);
-        writeSseEvent(res, {
-          type: 'openchamber:session-activity',
-          properties: {
-            sessionId: activity.sessionId,
-            phase: activity.phase,
+      const transitions = deriveSessionActivityTransitions(payload);
+      if (transitions && transitions.length > 0) {
+        for (const activity of transitions) {
+          if (setSessionActivityPhase(activity.sessionId, activity.phase)) {
+            writeSseEvent(res, {
+              type: 'openchamber:session-activity',
+              properties: {
+                sessionId: activity.sessionId,
+                phase: activity.phase,
+              }
+            });
           }
-        });
+        }
       }
     };
 

@@ -841,6 +841,34 @@ export const useEventStream = () => {
           type: part.type || 'text',
         } as Part;
 
+        // Desktop parity: derive activity phase from assistant part streaming.
+        if (roleInfo === 'assistant') {
+          const partType = (messagePart as { type?: unknown }).type;
+          const isStreamingPart =
+            partType === 'step-start' ||
+            partType === 'text' ||
+            partType === 'tool' ||
+            partType === 'reasoning' ||
+            partType === 'file' ||
+            partType === 'patch';
+
+          if (isStreamingPart) {
+            const currentPhase = useSessionStore.getState().sessionActivityPhase?.get(sessionId);
+            if (currentPhase !== 'busy' && currentPhase !== 'cooldown') {
+              updateSessionActivityPhase(sessionId, 'busy');
+            }
+          }
+
+          const finish = readStringProp(messageInfo as Record<string, unknown>, ['finish']);
+          if (finish === 'stop') {
+            // Match desktop semantics: only enter cooldown from busy.
+            const currentPhase = useSessionStore.getState().sessionActivityPhase?.get(sessionId);
+            if (currentPhase === 'busy') {
+              updateSessionActivityPhase(sessionId, 'cooldown');
+            }
+          }
+        }
+
         trackMessage(messageId, 'addStreamingPart_called');
         addStreamingPart(sessionId, messageId, messagePart, roleInfo);
         break;
