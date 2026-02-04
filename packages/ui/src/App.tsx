@@ -16,7 +16,8 @@ import { usePushVisibilityBeacon } from '@/hooks/usePushVisibilityBeacon';
 import { GitPollingProvider } from '@/hooks/useGitPolling';
 import { useConfigStore } from '@/stores/useConfigStore';
 import { hasModifier } from '@/lib/utils';
-import { isTauriShell } from '@/lib/desktop';
+import { isDesktopLocalOriginActive, isDesktopShell, isTauriShell } from '@/lib/desktop';
+import { OnboardingScreen } from '@/components/onboarding/OnboardingScreen';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
 import { opencodeClient } from '@/lib/opencode/client';
@@ -53,6 +54,7 @@ function App({ apis }: AppProps) {
   const { uiFont, monoFont } = useFontPreferences();
   const refreshGitHubAuthStatus = useGitHubAuthStore((state) => state.refreshStatus);
   const [isVSCodeRuntime, setIsVSCodeRuntime] = React.useState<boolean>(() => apis.runtime.isVSCode);
+  const [showCliOnboarding, setShowCliOnboarding] = React.useState(false);
 
   React.useEffect(() => {
     setIsVSCodeRuntime(apis.runtime.isVSCode);
@@ -204,6 +206,48 @@ function App({ apis }: AppProps) {
       setTimeout(() => clearError(), 5000);
     }
   }, [error, clearError]);
+
+  React.useEffect(() => {
+    if (!isDesktopShell() || !isDesktopLocalOriginActive()) {
+      return;
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const res = await fetch('/health', { method: 'GET' });
+        if (!res.ok) return;
+        const data = (await res.json().catch(() => null)) as null | { openCodeRunning?: unknown; lastOpenCodeError?: unknown };
+        if (!data || cancelled) return;
+        const openCodeRunning = data.openCodeRunning === true;
+        const err = typeof data.lastOpenCodeError === 'string' ? data.lastOpenCodeError : '';
+        const cliMissing = !openCodeRunning && /ENOENT|spawn\s+opencode|opencode(\.exe)?\s+not\s+found|not\s+found/i.test(err);
+        setShowCliOnboarding(cliMissing);
+      } catch {
+        // ignore
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleCliAvailable = React.useCallback(() => {
+    setShowCliOnboarding(false);
+    window.location.reload();
+  }, []);
+
+  if (showCliOnboarding) {
+    return (
+      <ErrorBoundary>
+        <div className="h-full text-foreground bg-transparent">
+          <OnboardingScreen onCliAvailable={handleCliAvailable} />
+        </div>
+      </ErrorBoundary>
+    );
+  }
 
   // VS Code runtime - simplified layout without git/terminal views
   if (isVSCodeRuntime) {

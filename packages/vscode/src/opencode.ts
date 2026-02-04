@@ -234,7 +234,7 @@ export function createOpenCodeManager(_context: vscode.ExtensionContext): OpenCo
     detectedPort = null;
     lastExitCode = null;
     managedApiUrlOverride = null;
- 
+
     try {
       // SDK spawns `opencode serve` in current process cwd.
       // Some OpenCode endpoints behave differently based on server process cwd,
@@ -280,13 +280,13 @@ export function createOpenCodeManager(_context: vscode.ExtensionContext): OpenCo
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      
+
       // Check for ENOENT or generic spawn failure which implies CLI missing
       if (message.includes('ENOENT') || message.includes('spawn opencode')) {
         cliMissing = true;
-        setStatus('error', 'OpenCode CLI not found. Install it or ensure it\'s in PATH.');
+        setStatus('error', 'OpenCode CLI not found. Install it and ensure it\'s in PATH.');
         vscode.window.showErrorMessage(
-          'OpenCode CLI not found. Please install it or ensure it\'s in PATH.',
+          'OpenCode CLI not found. Please install it and ensure it\'s in PATH.',
           'More Info'
         ).then(selection => {
           if (selection === 'More Info') {
@@ -301,7 +301,7 @@ export function createOpenCodeManager(_context: vscode.ExtensionContext): OpenCo
 
   async function stopInternal(): Promise<void> {
     const portToKill = detectedPort;
-    
+
     if (server) {
       try {
         server.close();
@@ -315,9 +315,9 @@ export function createOpenCodeManager(_context: vscode.ExtensionContext): OpenCo
     // Kill any process listening on our port to clean up orphaned children.
     if (portToKill) {
       try {
-        const lsofOutput = execSync(`lsof -ti:${portToKill} 2>/dev/null || true`, { 
+        const lsofOutput = execSync(`lsof -ti:${portToKill} 2>/dev/null || true`, {
           encoding: 'utf8',
-          timeout: 5000 
+          timeout: 5000
         });
         const myPid = process.pid;
         for (const pidStr of lsofOutput.split(/\s+/)) {
