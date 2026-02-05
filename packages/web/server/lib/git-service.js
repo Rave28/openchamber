@@ -1,37 +1,41 @@
-import simpleGit from 'simple-git';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import simpleGit from "simple-git";
+import fs from "fs";
+import path from "path";
+import os from "os";
+import { execFile } from "child_process";
+import { promisify } from "util";
 
 const fsp = fs.promises;
 const execFileAsync = promisify(execFile);
-const gpgconfCandidates = ['gpgconf', '/opt/homebrew/bin/gpgconf', '/usr/local/bin/gpgconf'];
+const gpgconfCandidates = [
+  "gpgconf",
+  "/opt/homebrew/bin/gpgconf",
+  "/usr/local/bin/gpgconf",
+];
 
 const isSocketPath = async (candidate) => {
-  if (!candidate || typeof candidate !== 'string') {
+  if (!candidate || typeof candidate !== "string") {
     return false;
   }
   try {
     const stat = await fsp.stat(candidate);
-    return typeof stat.isSocket === 'function' && stat.isSocket();
+    return typeof stat.isSocket === "function" && stat.isSocket();
   } catch {
     return false;
   }
 };
 
 const resolveSshAuthSock = async () => {
-  const existing = (process.env.SSH_AUTH_SOCK || '').trim();
+  const existing = (process.env.SSH_AUTH_SOCK || "").trim();
   if (existing) {
     return existing;
   }
 
-  if (process.platform === 'win32') {
+  if (process.platform === "win32") {
     return null;
   }
 
-  const gpgSock = path.join(os.homedir(), '.gnupg', 'S.gpg-agent.ssh');
+  const gpgSock = path.join(os.homedir(), ".gnupg", "S.gpg-agent.ssh");
   if (await isSocketPath(gpgSock)) {
     return gpgSock;
   }
@@ -40,23 +44,27 @@ const resolveSshAuthSock = async () => {
     for (const candidate of gpgconfCandidates) {
       try {
         const { stdout } = await execFileAsync(candidate, args);
-        return String(stdout || '');
+        return String(stdout || "");
       } catch {
         continue;
       }
     }
-    return '';
+    return "";
   };
 
-  const candidate = (await runGpgconf(['--list-dirs', 'agent-ssh-socket'])).trim();
-  if (candidate && await isSocketPath(candidate)) {
+  const candidate = (
+    await runGpgconf(["--list-dirs", "agent-ssh-socket"])
+  ).trim();
+  if (candidate && (await isSocketPath(candidate))) {
     return candidate;
   }
 
   if (candidate) {
-    await runGpgconf(['--launch', 'gpg-agent']);
-    const retried = (await runGpgconf(['--list-dirs', 'agent-ssh-socket'])).trim();
-    if (retried && await isSocketPath(retried)) {
+    await runGpgconf(["--launch", "gpg-agent"]);
+    const retried = (
+      await runGpgconf(["--list-dirs", "agent-ssh-socket"])
+    ).trim();
+    if (retried && (await isSocketPath(retried))) {
       return retried;
     }
   }
@@ -84,7 +92,7 @@ const createGit = async (directory) => {
 };
 
 const normalizeDirectoryPath = (value) => {
-  if (typeof value !== 'string') {
+  if (typeof value !== "string") {
     return value;
   }
 
@@ -93,29 +101,63 @@ const normalizeDirectoryPath = (value) => {
     return trimmed;
   }
 
-  if (trimmed === '~') {
+  if (trimmed === "~") {
     return os.homedir();
   }
 
-  if (trimmed.startsWith('~/') || trimmed.startsWith('~\\')) {
+  if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) {
     return path.join(os.homedir(), trimmed.slice(2));
   }
 
   return trimmed;
 };
 
+const resolveDirectoryCandidate = (candidate) => {
+  if (typeof candidate !== "string") {
+    return null;
+  }
+  const trimmed = candidate.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const normalized = normalizeDirectoryPath(trimmed);
+  return path.resolve(normalized);
+};
+
+export const validateDirectoryPath = async (candidate) => {
+  const resolved = resolveDirectoryCandidate(candidate);
+  if (!resolved) {
+    return { ok: false, error: "Directory parameter is required" };
+  }
+  try {
+    const stats = await fsp.stat(resolved);
+    if (!stats.isDirectory()) {
+      return { ok: false, error: "Specified path is not a directory" };
+    }
+    return { ok: true, directory: resolved };
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return { ok: false, error: "Directory not found" };
+    }
+    if (error?.code === "EACCES") {
+      return { ok: false, error: "Access to directory denied" };
+    }
+    return { ok: false, error: "Failed to validate directory" };
+  }
+};
+
 const cleanBranchName = (branch) => {
   if (!branch) {
     return branch;
   }
-  if (branch.startsWith('refs/heads/')) {
-    return branch.substring('refs/heads/'.length);
+  if (branch.startsWith("refs/heads/")) {
+    return branch.substring("refs/heads/".length);
   }
-  if (branch.startsWith('heads/')) {
-    return branch.substring('heads/'.length);
+  if (branch.startsWith("heads/")) {
+    return branch.substring("heads/".length);
   }
-  if (branch.startsWith('refs/')) {
-    return branch.substring('refs/'.length);
+  if (branch.startsWith("refs/")) {
+    return branch.substring("refs/".length);
   }
   return branch;
 };
@@ -126,7 +168,7 @@ export async function isGitRepository(directory) {
     return false;
   }
 
-  const gitDir = path.join(directoryPath, '.git');
+  const gitDir = path.join(directoryPath, ".git");
   return fs.existsSync(gitDir);
 }
 
@@ -137,35 +179,36 @@ export async function ensureOpenChamberIgnored(directory) {
     return false;
   }
 
-  const gitDir = path.join(directoryPath, '.git');
+  const gitDir = path.join(directoryPath, ".git");
   if (!fs.existsSync(gitDir)) {
     return false;
   }
 
-  const infoDir = path.join(gitDir, 'info');
-  const excludePath = path.join(infoDir, 'exclude');
-  const entry = '/.openchamber/';
+  const infoDir = path.join(gitDir, "info");
+  const excludePath = path.join(infoDir, "exclude");
+  const entry = "/.openchamber/";
 
   try {
     await fsp.mkdir(infoDir, { recursive: true });
-    let contents = '';
+    let contents = "";
     try {
-      contents = await fsp.readFile(excludePath, 'utf8');
+      contents = await fsp.readFile(excludePath, "utf8");
     } catch (readError) {
-      if (readError && readError.code !== 'ENOENT') {
+      if (readError && readError.code !== "ENOENT") {
         throw readError;
       }
     }
 
     const lines = contents.split(/\r?\n/).map((line) => line.trim());
     if (!lines.includes(entry)) {
-      const prefix = contents.length > 0 && !contents.endsWith('\n') ? '\n' : '';
-      await fsp.appendFile(excludePath, `${prefix}${entry}\n`, 'utf8');
+      const prefix =
+        contents.length > 0 && !contents.endsWith("\n") ? "\n" : "";
+      await fsp.appendFile(excludePath, `${prefix}${entry}\n`, "utf8");
     }
 
     return true;
   } catch (error) {
-    console.error('Failed to ensure .openchamber ignore:', error);
+    console.error("Failed to ensure .openchamber ignore:", error);
     throw error;
   }
 }
@@ -174,30 +217,36 @@ export async function getGlobalIdentity() {
   const git = await createGit();
 
   try {
-    const userName = await git.getConfig('user.name', 'global').catch(() => null);
-    const userEmail = await git.getConfig('user.email', 'global').catch(() => null);
-    const sshCommand = await git.getConfig('core.sshCommand', 'global').catch(() => null);
+    const userName = await git
+      .getConfig("user.name", "global")
+      .catch(() => null);
+    const userEmail = await git
+      .getConfig("user.email", "global")
+      .catch(() => null);
+    const sshCommand = await git
+      .getConfig("core.sshCommand", "global")
+      .catch(() => null);
 
     return {
       userName: userName?.value || null,
       userEmail: userEmail?.value || null,
-      sshCommand: sshCommand?.value || null
+      sshCommand: sshCommand?.value || null,
     };
   } catch (error) {
-    console.error('Failed to get global Git identity:', error);
+    console.error("Failed to get global Git identity:", error);
     return {
       userName: null,
       userEmail: null,
-      sshCommand: null
+      sshCommand: null,
     };
   }
 }
 
-export async function getRemoteUrl(directory, remoteName = 'origin') {
+export async function getRemoteUrl(directory, remoteName = "origin") {
   const git = await createGit(directory);
 
   try {
-    const url = await git.remote(['get-url', remoteName]);
+    const url = await git.remote(["get-url", remoteName]);
     return url?.trim() || null;
   } catch {
     return null;
@@ -208,30 +257,29 @@ export async function getCurrentIdentity(directory) {
   const git = await createGit(directory);
 
   try {
+    const userName = await git
+      .getConfig("user.name", "local")
+      .catch(() => git.getConfig("user.name", "global"));
 
-    const userName = await git.getConfig('user.name', 'local').catch(() =>
-      git.getConfig('user.name', 'global')
-    );
+    const userEmail = await git
+      .getConfig("user.email", "local")
+      .catch(() => git.getConfig("user.email", "global"));
 
-    const userEmail = await git.getConfig('user.email', 'local').catch(() =>
-      git.getConfig('user.email', 'global')
-    );
-
-    const sshCommand = await git.getConfig('core.sshCommand', 'local').catch(() =>
-      git.getConfig('core.sshCommand', 'global')
-    );
+    const sshCommand = await git
+      .getConfig("core.sshCommand", "local")
+      .catch(() => git.getConfig("core.sshCommand", "global"));
 
     return {
       userName: userName?.value || null,
       userEmail: userEmail?.value || null,
-      sshCommand: sshCommand?.value || null
+      sshCommand: sshCommand?.value || null,
     };
   } catch (error) {
-    console.error('Failed to get current Git identity:', error);
+    console.error("Failed to get current Git identity:", error);
     return {
       userName: null,
       userEmail: null,
-      sshCommand: null
+      sshCommand: null,
     };
   }
 }
@@ -240,8 +288,12 @@ export async function hasLocalIdentity(directory) {
   const git = await createGit(directory);
 
   try {
-    const localName = await git.getConfig('user.name', 'local').catch(() => null);
-    const localEmail = await git.getConfig('user.email', 'local').catch(() => null);
+    const localName = await git
+      .getConfig("user.name", "local")
+      .catch(() => null);
+    const localEmail = await git
+      .getConfig("user.email", "local")
+      .catch(() => null);
     return Boolean(localName?.value || localEmail?.value);
   } catch {
     return false;
@@ -252,33 +304,31 @@ export async function setLocalIdentity(directory, profile) {
   const git = await createGit(directory);
 
   try {
+    await git.addConfig("user.name", profile.userName, false, "local");
+    await git.addConfig("user.email", profile.userEmail, false, "local");
 
-    await git.addConfig('user.name', profile.userName, false, 'local');
-    await git.addConfig('user.email', profile.userEmail, false, 'local');
+    const authType = profile.authType || "ssh";
 
-    const authType = profile.authType || 'ssh';
-
-    if (authType === 'ssh' && profile.sshKey) {
+    if (authType === "ssh" && profile.sshKey) {
       await git.addConfig(
-        'core.sshCommand',
+        "core.sshCommand",
         `ssh -i ${profile.sshKey}`,
         false,
-        'local'
+        "local",
       );
-      await git.raw(['config', '--local', '--unset', 'credential.helper']).catch(() => {});
-    } else if (authType === 'token' && profile.host) {
-      await git.addConfig(
-        'credential.helper',
-        'store',
-        false,
-        'local'
-      );
-      await git.raw(['config', '--local', '--unset', 'core.sshCommand']).catch(() => {});
+      await git
+        .raw(["config", "--local", "--unset", "credential.helper"])
+        .catch(() => {});
+    } else if (authType === "token" && profile.host) {
+      await git.addConfig("credential.helper", "store", false, "local");
+      await git
+        .raw(["config", "--local", "--unset", "core.sshCommand"])
+        .catch(() => {});
     }
 
     return true;
   } catch (error) {
-    console.error('Failed to set Git identity:', error);
+    console.error("Failed to set Git identity:", error);
     throw error;
   }
 }
@@ -289,11 +339,11 @@ export async function getStatus(directory) {
 
   try {
     // Use -uall to show all untracked files individually, not just directories
-    const status = await git.status(['-uall']);
+    const status = await git.status(["-uall"]);
 
     const [stagedStatsRaw, workingStatsRaw] = await Promise.all([
-      git.raw(['diff', '--cached', '--numstat']).catch(() => ''),
-      git.raw(['diff', '--numstat']).catch(() => ''),
+      git.raw(["diff", "--cached", "--numstat"]).catch(() => ""),
+      git.raw(["diff", "--numstat"]).catch(() => ""),
     ]);
 
     const diffStatsMap = new Map();
@@ -301,23 +351,28 @@ export async function getStatus(directory) {
     const accumulateStats = (raw) => {
       if (!raw) return;
       raw
-        .split('\n')
+        .split("\n")
         .map((line) => line.trim())
         .filter(Boolean)
         .forEach((line) => {
-          const parts = line.split('\t');
+          const parts = line.split("\t");
           if (parts.length < 3) {
             return;
           }
           const [insertionsRaw, deletionsRaw, ...pathParts] = parts;
-          const path = pathParts.join('\t');
+          const path = pathParts.join("\t");
           if (!path) {
             return;
           }
-          const insertions = insertionsRaw === '-' ? 0 : parseInt(insertionsRaw, 10) || 0;
-          const deletions = deletionsRaw === '-' ? 0 : parseInt(deletionsRaw, 10) || 0;
+          const insertions =
+            insertionsRaw === "-" ? 0 : parseInt(insertionsRaw, 10) || 0;
+          const deletions =
+            deletionsRaw === "-" ? 0 : parseInt(deletionsRaw, 10) || 0;
 
-          const existing = diffStatsMap.get(path) || { insertions: 0, deletions: 0 };
+          const existing = diffStatsMap.get(path) || {
+            insertions: 0,
+            deletions: 0,
+          };
           diffStatsMap.set(path, {
             insertions: existing.insertions + insertions,
             deletions: existing.deletions + deletions,
@@ -332,11 +387,11 @@ export async function getStatus(directory) {
 
     const newFileStats = await Promise.all(
       status.files.map(async (file) => {
-        const working = (file.working_dir || '').trim();
-        const indexStatus = (file.index || '').trim();
+        const working = (file.working_dir || "").trim();
+        const indexStatus = (file.index || "").trim();
         const statusCode = working || indexStatus;
 
-        if (statusCode !== '?' && statusCode !== 'A') {
+        if (statusCode !== "?" && statusCode !== "A") {
           return null;
         }
 
@@ -362,7 +417,7 @@ export async function getStatus(directory) {
             };
           }
 
-          const normalized = buffer.toString('utf8').replace(/\r\n/g, '\n');
+          const normalized = buffer.toString("utf8").replace(/\r\n/g, "\n");
           if (!normalized.length) {
             return {
               path: file.path,
@@ -371,8 +426,8 @@ export async function getStatus(directory) {
             };
           }
 
-          const segments = normalized.split('\n');
-          if (normalized.endsWith('\n')) {
+          const segments = normalized.split("\n");
+          if (normalized.endsWith("\n")) {
             segments.pop();
           }
 
@@ -383,10 +438,14 @@ export async function getStatus(directory) {
             deletions: 0,
           };
         } catch (error) {
-          console.warn('Failed to estimate diff stats for new file', file.path, error);
+          console.warn(
+            "Failed to estimate diff stats for new file",
+            file.path,
+            error,
+          );
           return null;
         }
-      })
+      }),
     );
 
     for (const entry of newFileStats) {
@@ -401,22 +460,22 @@ export async function getStatus(directory) {
       const candidates = [];
 
       const originHead = await git
-        .raw(['symbolic-ref', '-q', 'refs/remotes/origin/HEAD'])
-        .then((value) => String(value || '').trim())
-        .catch(() => '');
+        .raw(["symbolic-ref", "-q", "refs/remotes/origin/HEAD"])
+        .then((value) => String(value || "").trim())
+        .catch(() => "");
 
       if (originHead) {
         // "refs/remotes/origin/main" -> "origin/main"
-        candidates.push(originHead.replace(/^refs\/remotes\//, ''));
+        candidates.push(originHead.replace(/^refs\/remotes\//, ""));
       }
 
-      candidates.push('origin/main', 'origin/master', 'main', 'master');
+      candidates.push("origin/main", "origin/master", "main", "master");
 
       for (const ref of candidates) {
         const exists = await git
-          .raw(['rev-parse', '--verify', ref])
-          .then((value) => String(value || '').trim())
-          .catch(() => '');
+          .raw(["rev-parse", "--verify", ref])
+          .then((value) => String(value || "").trim())
+          .catch(() => "");
         if (exists) return ref;
       }
 
@@ -433,9 +492,9 @@ export async function getStatus(directory) {
       const baseRef = await selectBaseRefForUnpublished();
       if (baseRef) {
         const countRaw = await git
-          .raw(['rev-list', '--count', `${baseRef}..HEAD`])
-          .then((value) => String(value || '').trim())
-          .catch(() => '');
+          .raw(["rev-list", "--count", `${baseRef}..HEAD`])
+          .then((value) => String(value || "").trim())
+          .catch(() => "");
         const count = parseInt(countRaw, 10);
         if (Number.isFinite(count)) {
           ahead = count;
@@ -458,27 +517,30 @@ export async function getStatus(directory) {
       diffStats,
     };
   } catch (error) {
-    console.error('Failed to get Git status:', error);
+    console.error("Failed to get Git status:", error);
     throw error;
   }
 }
 
-export async function getDiff(directory, { path, staged = false, contextLines = 3 } = {}) {
+export async function getDiff(
+  directory,
+  { path, staged = false, contextLines = 3 } = {},
+) {
   const git = await createGit(directory);
 
   try {
-    const args = ['diff', '--no-color'];
+    const args = ["diff", "--no-color"];
 
-    if (typeof contextLines === 'number' && !Number.isNaN(contextLines)) {
+    if (typeof contextLines === "number" && !Number.isNaN(contextLines)) {
       args.push(`-U${Math.max(0, contextLines)}`);
     }
 
     if (staged) {
-      args.push('--cached');
+      args.push("--cached");
     }
 
     if (path) {
-      args.push('--', path);
+      args.push("--", path);
     }
 
     const diff = await git.raw(args);
@@ -491,14 +553,14 @@ export async function getDiff(directory, { path, staged = false, contextLines = 
     }
 
     try {
-      await git.raw(['ls-files', '--error-unmatch', path]);
+      await git.raw(["ls-files", "--error-unmatch", path]);
       return diff;
     } catch {
-      const noIndexArgs = ['diff', '--no-color'];
-      if (typeof contextLines === 'number' && !Number.isNaN(contextLines)) {
+      const noIndexArgs = ["diff", "--no-color"];
+      if (typeof contextLines === "number" && !Number.isNaN(contextLines)) {
         noIndexArgs.push(`-U${Math.max(0, contextLines)}`);
       }
-      noIndexArgs.push('--no-index', '--', '/dev/null', path);
+      noIndexArgs.push("--no-index", "--", "/dev/null", path);
       try {
         const noIndexDiff = await git.raw(noIndexArgs);
         return noIndexDiff;
@@ -511,17 +573,20 @@ export async function getDiff(directory, { path, staged = false, contextLines = 
       }
     }
   } catch (error) {
-    console.error('Failed to get Git diff:', error);
+    console.error("Failed to get Git diff:", error);
     throw error;
   }
 }
 
-export async function getRangeDiff(directory, { base, head, path, contextLines = 3 } = {}) {
+export async function getRangeDiff(
+  directory,
+  { base, head, path, contextLines = 3 } = {},
+) {
   const git = await createGit(directory);
-  const baseRef = typeof base === 'string' ? base.trim() : '';
-  const headRef = typeof head === 'string' ? head.trim() : '';
+  const baseRef = typeof base === "string" ? base.trim() : "";
+  const headRef = typeof head === "string" ? head.trim() : "";
   if (!baseRef || !headRef) {
-    throw new Error('base and head are required');
+    throw new Error("base and head are required");
   }
 
   // Prefer remote-tracking base ref so merged commits don't reappear
@@ -529,7 +594,7 @@ export async function getRangeDiff(directory, { base, head, path, contextLines =
   let resolvedBase = baseRef;
   const originCandidate = `refs/remotes/origin/${baseRef}`;
   try {
-    const verified = await git.raw(['rev-parse', '--verify', originCandidate]);
+    const verified = await git.raw(["rev-parse", "--verify", originCandidate]);
     if (verified && verified.trim()) {
       resolvedBase = `origin/${baseRef}`;
     }
@@ -537,13 +602,13 @@ export async function getRangeDiff(directory, { base, head, path, contextLines =
     // ignore
   }
 
-  const args = ['diff', '--no-color'];
-  if (typeof contextLines === 'number' && !Number.isNaN(contextLines)) {
+  const args = ["diff", "--no-color"];
+  if (typeof contextLines === "number" && !Number.isNaN(contextLines)) {
     args.push(`-U${Math.max(0, contextLines)}`);
   }
   args.push(`${resolvedBase}...${headRef}`);
   if (path) {
-    args.push('--', path);
+    args.push("--", path);
   }
   const diff = await git.raw(args);
   return diff;
@@ -551,16 +616,16 @@ export async function getRangeDiff(directory, { base, head, path, contextLines =
 
 export async function getRangeFiles(directory, { base, head } = {}) {
   const git = await createGit(directory);
-  const baseRef = typeof base === 'string' ? base.trim() : '';
-  const headRef = typeof head === 'string' ? head.trim() : '';
+  const baseRef = typeof base === "string" ? base.trim() : "";
+  const headRef = typeof head === "string" ? head.trim() : "";
   if (!baseRef || !headRef) {
-    throw new Error('base and head are required');
+    throw new Error("base and head are required");
   }
 
   let resolvedBase = baseRef;
   const originCandidate = `refs/remotes/origin/${baseRef}`;
   try {
-    const verified = await git.raw(['rev-parse', '--verify', originCandidate]);
+    const verified = await git.raw(["rev-parse", "--verify", originCandidate]);
     if (verified && verified.trim()) {
       resolvedBase = `origin/${baseRef}`;
     }
@@ -568,39 +633,56 @@ export async function getRangeFiles(directory, { base, head } = {}) {
     // ignore
   }
 
-  const raw = await git.raw(['diff', '--name-only', `${resolvedBase}...${headRef}`]);
-  return String(raw || '')
-    .split('\n')
+  const raw = await git.raw([
+    "diff",
+    "--name-only",
+    `${resolvedBase}...${headRef}`,
+  ]);
+  return String(raw || "")
+    .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
 }
 
-const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp', 'avif'];
+const IMAGE_EXTENSIONS = [
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "svg",
+  "webp",
+  "ico",
+  "bmp",
+  "avif",
+];
 
 function isImageFile(filePath) {
-  const ext = filePath.split('.').pop()?.toLowerCase();
-  return IMAGE_EXTENSIONS.includes(ext || '');
+  const ext = filePath.split(".").pop()?.toLowerCase();
+  return IMAGE_EXTENSIONS.includes(ext || "");
 }
 
 function getImageMimeType(filePath) {
-  const ext = filePath.split('.').pop()?.toLowerCase();
+  const ext = filePath.split(".").pop()?.toLowerCase();
   const mimeMap = {
-    'png': 'image/png',
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'gif': 'image/gif',
-    'svg': 'image/svg+xml',
-    'webp': 'image/webp',
-    'ico': 'image/x-icon',
-    'bmp': 'image/bmp',
-    'avif': 'image/avif',
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    webp: "image/webp",
+    ico: "image/x-icon",
+    bmp: "image/bmp",
+    avif: "image/avif",
   };
-  return mimeMap[ext] || 'application/octet-stream';
+  return mimeMap[ext] || "application/octet-stream";
 }
 
-export async function getFileDiff(directory, { path: filePath, staged = false } = {}) {
+export async function getFileDiff(
+  directory,
+  { path: filePath, staged = false } = {},
+) {
   if (!directory || !filePath) {
-    throw new Error('directory and path are required for getFileDiff');
+    throw new Error("directory and path are required for getFileDiff");
   }
 
   const directoryPath = normalizeDirectoryPath(directory);
@@ -608,47 +690,51 @@ export async function getFileDiff(directory, { path: filePath, staged = false } 
   const isImage = isImageFile(filePath);
   const mimeType = isImage ? getImageMimeType(filePath) : null;
 
-  let original = '';
+  let original = "";
   try {
     if (isImage) {
       // For images, use git show with raw output and convert to base64
       try {
-        const { stdout } = await execFileAsync('git', ['show', `HEAD:${filePath}`], {
-          cwd: directoryPath,
-          encoding: 'buffer',
-          maxBuffer: 50 * 1024 * 1024, // 50MB max
-        });
+        const { stdout } = await execFileAsync(
+          "git",
+          ["show", `HEAD:${filePath}`],
+          {
+            cwd: directoryPath,
+            encoding: "buffer",
+            maxBuffer: 50 * 1024 * 1024, // 50MB max
+          },
+        );
         if (stdout && stdout.length > 0) {
-          original = `data:${mimeType};base64,${stdout.toString('base64')}`;
+          original = `data:${mimeType};base64,${stdout.toString("base64")}`;
         }
       } catch {
-        original = '';
+        original = "";
       }
     } else {
       original = await git.show([`HEAD:${filePath}`]);
     }
   } catch {
-    original = '';
+    original = "";
   }
 
   const fullPath = path.join(directoryPath, filePath);
-  let modified = '';
+  let modified = "";
   try {
     const stat = await fsp.stat(fullPath);
     if (stat.isFile()) {
       if (isImage) {
         // For images, read as binary and convert to data URL
         const buffer = await fsp.readFile(fullPath);
-        modified = `data:${mimeType};base64,${buffer.toString('base64')}`;
+        modified = `data:${mimeType};base64,${buffer.toString("base64")}`;
       } else {
-        modified = await fsp.readFile(fullPath, 'utf8');
+        modified = await fsp.readFile(fullPath, "utf8");
       }
     }
   } catch (error) {
-    if (error && typeof error === 'object' && error.code === 'ENOENT') {
-      modified = '';
+    if (error && typeof error === "object" && error.code === "ENOENT") {
+      modified = "";
     } else {
-      console.error('Failed to read modified file contents for diff:', error);
+      console.error("Failed to read modified file contents for diff:", error);
       throw error;
     }
   }
@@ -666,46 +752,56 @@ export async function revertFile(directory, filePath) {
   const repoRoot = path.resolve(directoryPath);
   const absoluteTarget = path.resolve(repoRoot, filePath);
 
-  if (!absoluteTarget.startsWith(repoRoot + path.sep) && absoluteTarget !== repoRoot) {
-    throw new Error('Invalid file path');
+  if (
+    !absoluteTarget.startsWith(repoRoot + path.sep) &&
+    absoluteTarget !== repoRoot
+  ) {
+    throw new Error("Invalid file path");
   }
 
   const isTracked = await git
-    .raw(['ls-files', '--error-unmatch', filePath])
+    .raw(["ls-files", "--error-unmatch", filePath])
     .then(() => true)
     .catch(() => false);
 
   if (!isTracked) {
     try {
-      await git.raw(['clean', '-f', '-d', '--', filePath]);
+      await git.raw(["clean", "-f", "-d", "--", filePath]);
       return;
     } catch (cleanError) {
       try {
         await fsp.rm(absoluteTarget, { recursive: true, force: true });
         return;
       } catch (fsError) {
-        if (fsError && typeof fsError === 'object' && fsError.code === 'ENOENT') {
+        if (
+          fsError &&
+          typeof fsError === "object" &&
+          fsError.code === "ENOENT"
+        ) {
           return;
         }
-        console.error('Failed to remove untracked file during revert:', fsError);
+        console.error(
+          "Failed to remove untracked file during revert:",
+          fsError,
+        );
         throw fsError;
       }
     }
   }
 
   try {
-    await git.raw(['restore', '--staged', filePath]);
+    await git.raw(["restore", "--staged", filePath]);
   } catch (error) {
-    await git.raw(['reset', 'HEAD', '--', filePath]).catch(() => {});
+    await git.raw(["reset", "HEAD", "--", filePath]).catch(() => {});
   }
 
   try {
-    await git.raw(['restore', filePath]);
+    await git.raw(["restore", filePath]);
   } catch (error) {
     try {
-      await git.raw(['checkout', '--', filePath]);
+      await git.raw(["checkout", "--", filePath]);
     } catch (fallbackError) {
-      console.error('Failed to revert git file:', fallbackError);
+      console.error("Failed to revert git file:", fallbackError);
       throw fallbackError;
     }
   }
@@ -731,9 +827,9 @@ export async function pull(directory, options = {}) {
 
   try {
     const result = await git.pull(
-      options.remote || 'origin',
+      options.remote || "origin",
       options.branch,
-      options.options || {}
+      options.options || {},
     );
 
     return {
@@ -741,10 +837,10 @@ export async function pull(directory, options = {}) {
       summary: result.summary,
       files: result.files,
       insertions: result.insertions,
-      deletions: result.deletions
+      deletions: result.deletions,
     };
   } catch (error) {
-    console.error('Failed to pull:', error);
+    console.error("Failed to pull:", error);
     throw error;
   }
 }
@@ -754,24 +850,26 @@ export async function push(directory, options = {}) {
 
   const buildUpstreamOptions = (raw) => {
     if (Array.isArray(raw)) {
-      return raw.includes('--set-upstream') ? raw : [...raw, '--set-upstream'];
+      return raw.includes("--set-upstream") ? raw : [...raw, "--set-upstream"];
     }
 
-    if (raw && typeof raw === 'object') {
-      return { ...raw, '--set-upstream': null };
+    if (raw && typeof raw === "object") {
+      return { ...raw, "--set-upstream": null };
     }
 
-    return ['--set-upstream'];
+    return ["--set-upstream"];
   };
 
   const looksLikeMissingUpstream = (error) => {
-    const message = String(error?.message || error?.stderr || '').toLowerCase();
+    const message = String(error?.message || error?.stderr || "").toLowerCase();
     return (
-      message.includes('has no upstream') ||
-      message.includes('no upstream') ||
-      message.includes('set-upstream') ||
-      message.includes('set upstream') ||
-      (message.includes('upstream') && message.includes('push') && message.includes('-u'))
+      message.includes("has no upstream") ||
+      message.includes("no upstream") ||
+      message.includes("set-upstream") ||
+      message.includes("set upstream") ||
+      (message.includes("upstream") &&
+        message.includes("push") &&
+        message.includes("-u"))
     );
   };
 
@@ -784,7 +882,7 @@ export async function push(directory, options = {}) {
     };
   };
 
-  const remote = options.remote || 'origin';
+  const remote = options.remote || "origin";
 
   // If caller didn't specify a branch, this is the common "Push"/"Commit & Push" path.
   // When there's no upstream yet (typical for freshly-created worktree branches), publish it on first push.
@@ -792,22 +890,30 @@ export async function push(directory, options = {}) {
     try {
       const status = await git.status();
       if (status.current && !status.tracking) {
-        const result = await git.push(remote, status.current, buildUpstreamOptions(options.options));
+        const result = await git.push(
+          remote,
+          status.current,
+          buildUpstreamOptions(options.options),
+        );
         return normalizePushResult(result);
       }
     } catch (error) {
       // If we can't read status, fall back to the regular push path below.
-      console.warn('Failed to read git status before push:', error);
+      console.warn("Failed to read git status before push:", error);
     }
   }
 
   try {
-    const result = await git.push(remote, options.branch, options.options || {});
+    const result = await git.push(
+      remote,
+      options.branch,
+      options.options || {},
+    );
     return normalizePushResult(result);
   } catch (error) {
     // Last-resort fallback: retry with upstream if the error suggests it's missing.
     if (!looksLikeMissingUpstream(error)) {
-      console.error('Failed to push:', error);
+      console.error("Failed to push:", error);
       throw error;
     }
 
@@ -815,14 +921,24 @@ export async function push(directory, options = {}) {
       const status = await git.status();
       const branch = options.branch || status.current;
       if (!branch) {
-        console.error('Failed to push: missing branch name for upstream setup:', error);
+        console.error(
+          "Failed to push: missing branch name for upstream setup:",
+          error,
+        );
         throw error;
       }
 
-      const result = await git.push(remote, branch, buildUpstreamOptions(options.options));
+      const result = await git.push(
+        remote,
+        branch,
+        buildUpstreamOptions(options.options),
+      );
       return normalizePushResult(result);
     } catch (fallbackError) {
-      console.error('Failed to push (including upstream fallback):', fallbackError);
+      console.error(
+        "Failed to push (including upstream fallback):",
+        fallbackError,
+      );
       throw fallbackError;
     }
   }
@@ -831,20 +947,20 @@ export async function push(directory, options = {}) {
 export async function deleteRemoteBranch(directory, options = {}) {
   const { branch, remote } = options;
   if (!branch) {
-    throw new Error('branch is required to delete remote branch');
+    throw new Error("branch is required to delete remote branch");
   }
 
   const git = await createGit(directory);
-  const targetBranch = branch.startsWith('refs/heads/')
-    ? branch.substring('refs/heads/'.length)
+  const targetBranch = branch.startsWith("refs/heads/")
+    ? branch.substring("refs/heads/".length)
     : branch;
-  const remoteName = remote || 'origin';
+  const remoteName = remote || "origin";
 
   try {
     await git.push(remoteName, `:${targetBranch}`);
     return { success: true };
   } catch (error) {
-    console.error('Failed to delete remote branch:', error);
+    console.error("Failed to delete remote branch:", error);
     throw error;
   }
 }
@@ -854,14 +970,14 @@ export async function fetch(directory, options = {}) {
 
   try {
     await git.fetch(
-      options.remote || 'origin',
+      options.remote || "origin",
       options.branch,
-      options.options || {}
+      options.options || {},
     );
 
     return { success: true };
   } catch (error) {
-    console.error('Failed to fetch:', error);
+    console.error("Failed to fetch:", error);
     throw error;
   }
 }
@@ -870,15 +986,16 @@ export async function commit(directory, message, options = {}) {
   const git = await createGit(directory);
 
   try {
-
     if (options.addAll) {
-      await git.add('.');
+      await git.add(".");
     } else if (Array.isArray(options.files) && options.files.length > 0) {
       await git.add(options.files);
     }
 
     const commitArgs =
-      !options.addAll && Array.isArray(options.files) && options.files.length > 0
+      !options.addAll &&
+      Array.isArray(options.files) &&
+      options.files.length > 0
         ? options.files
         : undefined;
 
@@ -888,10 +1005,10 @@ export async function commit(directory, message, options = {}) {
       success: true,
       commit: result.commit,
       branch: result.branch,
-      summary: result.summary
+      summary: result.summary,
     };
   } catch (error) {
-    console.error('Failed to commit:', error);
+    console.error("Failed to commit:", error);
     throw error;
   }
 }
@@ -903,41 +1020,44 @@ export async function getBranches(directory) {
     const result = await git.branch();
 
     const allBranches = result.all;
-    const remoteBranches = allBranches.filter(branch => branch.startsWith('remotes/'));
-    const activeRemoteBranches = await filterActiveRemoteBranches(git, remoteBranches);
+    const remoteBranches = allBranches.filter((branch) =>
+      branch.startsWith("remotes/"),
+    );
+    const activeRemoteBranches = await filterActiveRemoteBranches(
+      git,
+      remoteBranches,
+    );
 
     const filteredAll = [
-      ...allBranches.filter(branch => !branch.startsWith('remotes/')),
-      ...activeRemoteBranches
+      ...allBranches.filter((branch) => !branch.startsWith("remotes/")),
+      ...activeRemoteBranches,
     ];
 
     return {
       all: filteredAll,
       current: result.current,
-      branches: result.branches
+      branches: result.branches,
     };
   } catch (error) {
-    console.error('Failed to get branches:', error);
+    console.error("Failed to get branches:", error);
     throw error;
   }
 }
 
 async function filterActiveRemoteBranches(git, remoteBranches) {
   try {
-
-    const lsRemoteResult = await git.raw(['ls-remote', '--heads', 'origin']);
+    const lsRemoteResult = await git.raw(["ls-remote", "--heads", "origin"]);
     const actualRemoteBranches = new Set();
 
-    const lines = lsRemoteResult.trim().split('\n');
+    const lines = lsRemoteResult.trim().split("\n");
     for (const line of lines) {
-      if (line.includes('\trefs/heads/')) {
-        const branchName = line.split('\t')[1].replace('refs/heads/', '');
+      if (line.includes("\trefs/heads/")) {
+        const branchName = line.split("\t")[1].replace("refs/heads/", "");
         actualRemoteBranches.add(branchName);
       }
     }
 
-    return remoteBranches.filter(remoteBranch => {
-
+    return remoteBranches.filter((remoteBranch) => {
       const match = remoteBranch.match(/^remotes\/[^\/]+\/(.+)$/);
       if (!match) return false;
 
@@ -945,7 +1065,10 @@ async function filterActiveRemoteBranches(git, remoteBranches) {
       return actualRemoteBranches.has(branchName);
     });
   } catch (error) {
-    console.warn('Failed to filter active remote branches, returning all:', error.message);
+    console.warn(
+      "Failed to filter active remote branches, returning all:",
+      error.message,
+    );
     return remoteBranches;
   }
 }
@@ -954,10 +1077,10 @@ export async function createBranch(directory, branchName, options = {}) {
   const git = await createGit(directory);
 
   try {
-    await git.checkoutBranch(branchName, options.startPoint || 'HEAD');
+    await git.checkoutBranch(branchName, options.startPoint || "HEAD");
     return { success: true, branch: branchName };
   } catch (error) {
-    console.error('Failed to create branch:', error);
+    console.error("Failed to create branch:", error);
     throw error;
   }
 }
@@ -969,37 +1092,41 @@ export async function checkoutBranch(directory, branchName) {
     await git.checkout(branchName);
     return { success: true, branch: branchName };
   } catch (error) {
-    console.error('Failed to checkout branch:', error);
+    console.error("Failed to checkout branch:", error);
     throw error;
   }
 }
 
 export async function getWorktrees(directory) {
   const directoryPath = normalizeDirectoryPath(directory);
-  if (!directoryPath || !fs.existsSync(directoryPath) || !fs.existsSync(path.join(directoryPath, '.git'))) {
+  if (
+    !directoryPath ||
+    !fs.existsSync(directoryPath) ||
+    !fs.existsSync(path.join(directoryPath, ".git"))
+  ) {
     return [];
   }
 
   const git = await createGit(directoryPath);
 
   try {
-    const result = await git.raw(['worktree', 'list', '--porcelain']);
+    const result = await git.raw(["worktree", "list", "--porcelain"]);
 
     const worktrees = [];
-    const lines = result.split('\n');
+    const lines = result.split("\n");
     let current = {};
 
     for (const line of lines) {
-      if (line.startsWith('worktree ')) {
+      if (line.startsWith("worktree ")) {
         if (current.worktree) {
           worktrees.push(current);
         }
         current = { worktree: line.substring(9) };
-      } else if (line.startsWith('HEAD ')) {
+      } else if (line.startsWith("HEAD ")) {
         current.head = line.substring(5);
-      } else if (line.startsWith('branch ')) {
+      } else if (line.startsWith("branch ")) {
         current.branch = cleanBranchName(line.substring(7));
-      } else if (line === '') {
+      } else if (line === "") {
         if (current.worktree) {
           worktrees.push(current);
           current = {};
@@ -1013,20 +1140,29 @@ export async function getWorktrees(directory) {
 
     return worktrees;
   } catch (error) {
-    console.warn('Failed to list worktrees, returning empty list:', error?.message || error);
+    console.warn(
+      "Failed to list worktrees, returning empty list:",
+      error?.message || error,
+    );
     return [];
   }
 }
 
-export async function addWorktree(directory, worktreePath, branch, options = {}) {
+export async function addWorktree(
+  directory,
+  worktreePath,
+  branch,
+  options = {},
+) {
   const git = await createGit(directory);
 
   try {
-    const args = ['worktree', 'add'];
-    const startPoint = typeof options.startPoint === 'string' ? options.startPoint.trim() : '';
+    const args = ["worktree", "add"];
+    const startPoint =
+      typeof options.startPoint === "string" ? options.startPoint.trim() : "";
 
     if (options.createBranch) {
-      args.push('-b', branch);
+      args.push("-b", branch);
     }
 
     args.push(worktreePath);
@@ -1042,10 +1178,10 @@ export async function addWorktree(directory, worktreePath, branch, options = {})
     return {
       success: true,
       path: worktreePath,
-      branch
+      branch,
     };
   } catch (error) {
-    console.error('Failed to add worktree:', error);
+    console.error("Failed to add worktree:", error);
     throw error;
   }
 }
@@ -1054,17 +1190,17 @@ export async function removeWorktree(directory, worktreePath, options = {}) {
   const git = await createGit(directory);
 
   try {
-    const args = ['worktree', 'remove', worktreePath];
+    const args = ["worktree", "remove", worktreePath];
 
     if (options.force) {
-      args.push('--force');
+      args.push("--force");
     }
 
     await git.raw(args);
 
     return { success: true };
   } catch (error) {
-    console.error('Failed to remove worktree:', error);
+    console.error("Failed to remove worktree:", error);
     throw error;
   }
 }
@@ -1073,14 +1209,14 @@ export async function deleteBranch(directory, branch, options = {}) {
   const git = await createGit(directory);
 
   try {
-    const branchName = branch.startsWith('refs/heads/')
-      ? branch.substring('refs/heads/'.length)
+    const branchName = branch.startsWith("refs/heads/")
+      ? branch.substring("refs/heads/".length)
       : branch;
-    const args = ['branch', options.force ? '-D' : '-d', branchName];
+    const args = ["branch", options.force ? "-D" : "-d", branchName];
     await git.raw(args);
     return { success: true };
   } catch (error) {
-    console.error('Failed to delete branch:', error);
+    console.error("Failed to delete branch:", error);
     throw error;
   }
 }
@@ -1094,15 +1230,15 @@ export async function getLog(directory, options = {}) {
       maxCount,
       from: options.from,
       to: options.to,
-      file: options.file
+      file: options.file,
     });
 
     const logArgs = [
-      'log',
+      "log",
       `--max-count=${maxCount}`,
-      '--date=iso',
-      '--pretty=format:%H%x1f%an%x1f%ae%x1f%ad%x1f%s%x1e',
-      '--shortstat'
+      "--date=iso",
+      "--pretty=format:%H%x1f%an%x1f%ae%x1f%ad%x1f%s%x1e",
+      "--shortstat",
     ];
 
     if (options.from && options.to) {
@@ -1114,21 +1250,21 @@ export async function getLog(directory, options = {}) {
     }
 
     if (options.file) {
-      logArgs.push('--', options.file);
+      logArgs.push("--", options.file);
     }
 
     const rawLog = await git.raw(logArgs);
     const records = rawLog
-      .split('\x1e')
+      .split("\x1e")
       .map((entry) => entry.trim())
       .filter(Boolean);
 
     const statsMap = new Map();
 
     records.forEach((record) => {
-      const lines = record.split('\n').filter((line) => line.trim().length > 0);
-      const header = lines.shift() || '';
-      const [hash] = header.split('\x1f');
+      const lines = record.split("\n").filter((line) => line.trim().length > 0);
+      const header = lines.shift() || "";
+      const [hash] = header.split("\x1f");
       if (!hash) {
         return;
       }
@@ -1157,28 +1293,32 @@ export async function getLog(directory, options = {}) {
     });
 
     const merged = baseLog.all.map((entry) => {
-      const stats = statsMap.get(entry.hash) || { filesChanged: 0, insertions: 0, deletions: 0 };
+      const stats = statsMap.get(entry.hash) || {
+        filesChanged: 0,
+        insertions: 0,
+        deletions: 0,
+      };
       return {
         hash: entry.hash,
         date: entry.date,
         message: entry.message,
-        refs: entry.refs || '',
-        body: entry.body || '',
+        refs: entry.refs || "",
+        body: entry.body || "",
         author_name: entry.author_name,
         author_email: entry.author_email,
         filesChanged: stats.filesChanged,
         insertions: stats.insertions,
-        deletions: stats.deletions
+        deletions: stats.deletions,
       };
     });
 
     return {
       all: merged,
       latest: merged[0] || null,
-      total: baseLog.total
+      total: baseLog.total,
     };
   } catch (error) {
-    console.error('Failed to get log:', error);
+    console.error("Failed to get log:", error);
     throw error;
   }
 }
@@ -1187,12 +1327,14 @@ export async function isLinkedWorktree(directory) {
   const git = await createGit(directory);
   try {
     const [gitDir, gitCommonDir] = await Promise.all([
-      git.raw(['rev-parse', '--git-dir']).then((output) => output.trim()),
-      git.raw(['rev-parse', '--git-common-dir']).then((output) => output.trim())
+      git.raw(["rev-parse", "--git-dir"]).then((output) => output.trim()),
+      git
+        .raw(["rev-parse", "--git-common-dir"])
+        .then((output) => output.trim()),
     ]);
     return gitDir !== gitCommonDir;
   } catch (error) {
-    console.error('Failed to determine worktree type:', error);
+    console.error("Failed to determine worktree type:", error);
     return false;
   }
 }
@@ -1201,34 +1343,35 @@ export async function getCommitFiles(directory, commitHash) {
   const git = await createGit(directory);
 
   try {
-
     const numstatRaw = await git.raw([
-      'show',
-      '--numstat',
-      '--format=',
-      commitHash
+      "show",
+      "--numstat",
+      "--format=",
+      commitHash,
     ]);
 
     const files = [];
-    const lines = numstatRaw.trim().split('\n').filter(Boolean);
+    const lines = numstatRaw.trim().split("\n").filter(Boolean);
 
     for (const line of lines) {
-      const parts = line.split('\t');
+      const parts = line.split("\t");
       if (parts.length < 3) continue;
 
       const [insertionsRaw, deletionsRaw, ...pathParts] = parts;
-      const filePath = pathParts.join('\t');
+      const filePath = pathParts.join("\t");
       if (!filePath) continue;
 
-      const insertions = insertionsRaw === '-' ? 0 : parseInt(insertionsRaw, 10) || 0;
-      const deletions = deletionsRaw === '-' ? 0 : parseInt(deletionsRaw, 10) || 0;
-      const isBinary = insertionsRaw === '-' && deletionsRaw === '-';
+      const insertions =
+        insertionsRaw === "-" ? 0 : parseInt(insertionsRaw, 10) || 0;
+      const deletions =
+        deletionsRaw === "-" ? 0 : parseInt(deletionsRaw, 10) || 0;
+      const isBinary = insertionsRaw === "-" && deletionsRaw === "-";
 
-      let changeType = 'M';
+      let changeType = "M";
       let displayPath = filePath;
 
-      if (filePath.includes(' => ')) {
-        changeType = 'R';
+      if (filePath.includes(" => ")) {
+        changeType = "R";
 
         const match = filePath.match(/(?:\{[^}]*\s=>\s[^}]*\}|.*\s=>\s.*)/);
         if (match) {
@@ -1241,19 +1384,16 @@ export async function getCommitFiles(directory, commitHash) {
         insertions,
         deletions,
         isBinary,
-        changeType
+        changeType,
       });
     }
 
-    const nameStatusRaw = await git.raw([
-      'show',
-      '--name-status',
-      '--format=',
-      commitHash
-    ]).catch(() => '');
+    const nameStatusRaw = await git
+      .raw(["show", "--name-status", "--format=", commitHash])
+      .catch(() => "");
 
     const statusMap = new Map();
-    const statusLines = nameStatusRaw.trim().split('\n').filter(Boolean);
+    const statusLines = nameStatusRaw.trim().split("\n").filter(Boolean);
     for (const line of statusLines) {
       const match = line.match(/^([AMDRC])\d*\t(.+)$/);
       if (match) {
@@ -1263,8 +1403,8 @@ export async function getCommitFiles(directory, commitHash) {
     }
 
     for (const file of files) {
-      const basePath = file.path.includes(' => ')
-        ? file.path.split(' => ').pop()?.replace(/[{}]/g, '') || file.path
+      const basePath = file.path.includes(" => ")
+        ? file.path.split(" => ").pop()?.replace(/[{}]/g, "") || file.path
         : file.path;
 
       const status = statusMap.get(basePath) || statusMap.get(file.path);
@@ -1275,7 +1415,7 @@ export async function getCommitFiles(directory, commitHash) {
 
     return { files };
   } catch (error) {
-    console.error('Failed to get commit files:', error);
+    console.error("Failed to get commit files:", error);
     throw error;
   }
 }
@@ -1285,10 +1425,47 @@ export async function renameBranch(directory, oldName, newName) {
 
   try {
     // Use git branch -m command to rename the branch
-    await git.raw(['branch', '-m', oldName, newName]);
+    await git.raw(["branch", "-m", oldName, newName]);
     return { success: true, branch: newName };
   } catch (error) {
-    console.error('Failed to rename branch:', error);
+    console.error("Failed to rename branch:", error);
+    throw error;
+  }
+}
+
+export async function getRemotes(directory) {
+  const git = await createGit(directory);
+  try {
+    const remotes = await git.getRemotes(true);
+    return remotes.map((r) => ({
+      name: r.name,
+      fetchUrl: r.refs.fetch,
+      pushUrl: r.refs.push,
+    }));
+  } catch (error) {
+    console.error("Failed to get remotes:", error);
+    throw error;
+  }
+}
+
+export async function addRemote(directory, name, url) {
+  const git = await createGit(directory);
+  try {
+    await git.addRemote(name, url);
+    return { success: true, name, url };
+  } catch (error) {
+    console.error("Failed to add remote:", error);
+    throw error;
+  }
+}
+
+export async function removeRemote(directory, name) {
+  const git = await createGit(directory);
+  try {
+    await git.removeRemote(name);
+    return { success: true, name };
+  } catch (error) {
+    console.error("Failed to remove remote:", error);
     throw error;
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@openchamber/web",
-  "version": "1.6.4",
+  "version": "1.7.0",
   "private": false,
   "type": "module",
   "main": "./server/index.js",
@@ -87,6 +87,7 @@
     "typescript-eslint": "^8.39.1",
     "vite": "^7.1.2",
     "vite-plugin-pwa": "^1.0.3",
+    "vitest": "^4.0.18",
     "workbox-window": "^7.4.0"
   },
   "files": [
