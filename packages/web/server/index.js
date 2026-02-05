@@ -1292,6 +1292,7 @@ const sanitizeSettingsUpdate = (payload) => {
       Math.min(100, Math.round(candidate.inputBarOffset)),
     );
   }
+
   const favoriteModels = sanitizeModelRefs(candidate.favoriteModels, 64);
   if (favoriteModels) {
     result.favoriteModels = favoriteModels;
@@ -2652,25 +2653,20 @@ function deriveSessionActivityTransitions(payload) {
       payload.properties?.sessionId;
     const role = info?.role;
     const finish = info?.finish;
+
     if (
       typeof sessionId === "string" &&
       sessionId.length > 0 &&
       role === "assistant"
     ) {
       const transitions = [];
-      const info = payload.properties?.info;
-      const part = payload.properties?.part;
-      const partType = part?.type;
 
-      if (
-        partType === "step-start" ||
-        partType === "thought" ||
-        partType === "call" ||
-        partType === "reasoning"
-      ) {
+      // Desktop parity: mark busy when we see assistant parts streaming.
+      if (isStreamingAssistantPart(payload.properties)) {
         transitions.push({ sessionId, phase: "busy" });
       }
 
+      // Desktop parity: enter cooldown when finish==stop.
       if (finish === "stop") {
         transitions.push({ sessionId, phase: "cooldown" });
       }
@@ -4114,9 +4110,11 @@ async function main(options = {}) {
     }
 
     if (!upstream.ok || !upstream.body) {
-      return res.status(502).json({
-        error: `OpenCode event stream unavailable (${upstream.status})`,
-      });
+      return res
+        .status(502)
+        .json({
+          error: `OpenCode event stream unavailable (${upstream.status})`,
+        });
     }
 
     res.setHeader("Content-Type", "text/event-stream");
@@ -4258,9 +4256,11 @@ async function main(options = {}) {
     }
 
     if (!upstream.ok || !upstream.body) {
-      return res.status(502).json({
-        error: `OpenCode event stream unavailable (${upstream.status})`,
-      });
+      return res
+        .status(502)
+        .json({
+          error: `OpenCode event stream unavailable (${upstream.status})`,
+        });
     }
 
     res.setHeader("Content-Type", "text/event-stream");
@@ -4345,10 +4345,12 @@ async function main(options = {}) {
       res.json(formatSettingsResponse(settings));
     } catch (error) {
       console.error("Failed to load settings:", error);
-      res.status(500).json({
-        error:
-          error instanceof Error ? error.message : "Failed to load settings",
-      });
+      res
+        .status(500)
+        .json({
+          error:
+            error instanceof Error ? error.message : "Failed to load settings",
+        });
     }
   });
 
@@ -4358,12 +4360,14 @@ async function main(options = {}) {
       res.json({ themes: customThemes });
     } catch (error) {
       console.error("Failed to load custom themes:", error);
-      res.status(500).json({
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to load custom themes",
-      });
+      res
+        .status(500)
+        .json({
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to load custom themes",
+        });
     }
   });
 
@@ -4385,10 +4389,12 @@ async function main(options = {}) {
         error,
       );
       console.error(`[API:PUT /api/config/settings] Error stack:`, error.stack);
-      res.status(500).json({
-        error:
-          error instanceof Error ? error.message : "Failed to save settings",
-      });
+      res
+        .status(500)
+        .json({
+          error:
+            error instanceof Error ? error.message : "Failed to save settings",
+        });
     }
   });
 
@@ -4777,13 +4783,15 @@ async function main(options = {}) {
       });
     } catch (error) {
       console.error("Failed to load skills catalog:", error);
-      res.status(500).json({
-        ok: false,
-        error: {
-          kind: "unknown",
-          message: error.message || "Failed to load catalog",
-        },
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          error: {
+            kind: "unknown",
+            message: error.message || "Failed to load catalog",
+          },
+        });
     }
   });
 
@@ -4791,19 +4799,23 @@ async function main(options = {}) {
     try {
       const { directory, error } = await resolveOptionalProjectDirectory(req);
       if (error) {
-        return res.status(400).json({
-          ok: false,
-          error: { kind: "invalidSource", message: error },
-        });
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error: { kind: "invalidSource", message: error },
+          });
       }
 
       const sourceId =
         typeof req.query.sourceId === "string" ? req.query.sourceId : null;
       if (!sourceId) {
-        return res.status(400).json({
-          ok: false,
-          error: { kind: "invalidSource", message: "Missing sourceId" },
-        });
+        return res
+          .status(400)
+          .json({
+            ok: false,
+            error: { kind: "invalidSource", message: "Missing sourceId" },
+          });
       }
 
       const refresh = String(req.query.refresh || "").toLowerCase() === "true";
@@ -4828,10 +4840,12 @@ async function main(options = {}) {
       const src = sources.find((entry) => entry.id === sourceId);
 
       if (!src) {
-        return res.status(404).json({
-          ok: false,
-          error: { kind: "invalidSource", message: "Unknown source" },
-        });
+        return res
+          .status(404)
+          .json({
+            ok: false,
+            error: { kind: "invalidSource", message: "Unknown source" },
+          });
       }
 
       const discovered = directory ? discoverSkills(directory) : [];
@@ -4944,13 +4958,15 @@ async function main(options = {}) {
       res.json({ ok: true, items: result.items });
     } catch (error) {
       console.error("Failed to scan skills repository:", error);
-      res.status(500).json({
-        ok: false,
-        error: {
-          kind: "unknown",
-          message: error.message || "Failed to scan repository",
-        },
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          error: {
+            kind: "unknown",
+            message: error.message || "Failed to scan repository",
+          },
+        });
     }
   });
 
@@ -5048,13 +5064,15 @@ async function main(options = {}) {
       });
     } catch (error) {
       console.error("Failed to install skills:", error);
-      res.status(500).json({
-        ok: false,
-        error: {
-          kind: "unknown",
-          message: error.message || "Failed to install skills",
-        },
-      });
+      res
+        .status(500)
+        .json({
+          ok: false,
+          error: {
+            kind: "unknown",
+            message: error.message || "Failed to install skills",
+          },
+        });
     }
   });
 
@@ -5488,9 +5506,11 @@ async function main(options = {}) {
       });
     } catch (error) {
       console.error("Failed to complete GitHub device flow:", error);
-      return res.status(500).json({
-        error: error.message || "Failed to complete GitHub device flow",
-      });
+      return res
+        .status(500)
+        .json({
+          error: error.message || "Failed to complete GitHub device flow",
+        });
     }
   });
 
@@ -6971,9 +6991,11 @@ async function main(options = {}) {
       res.json(profile);
     } catch (error) {
       console.error("Failed to create git identity profile:", error);
-      res.status(400).json({
-        error: error.message || "Failed to create git identity profile",
-      });
+      res
+        .status(400)
+        .json({
+          error: error.message || "Failed to create git identity profile",
+        });
     }
   });
 
@@ -6987,9 +7009,11 @@ async function main(options = {}) {
       res.json(profile);
     } catch (error) {
       console.error("Failed to update git identity profile:", error);
-      res.status(400).json({
-        error: error.message || "Failed to update git identity profile",
-      });
+      res
+        .status(400)
+        .json({
+          error: error.message || "Failed to update git identity profile",
+        });
     }
   });
 
@@ -7001,9 +7025,11 @@ async function main(options = {}) {
       res.json({ success: true });
     } catch (error) {
       console.error("Failed to delete git identity profile:", error);
-      res.status(400).json({
-        error: error.message || "Failed to delete git identity profile",
-      });
+      res
+        .status(400)
+        .json({
+          error: error.message || "Failed to delete git identity profile",
+        });
     }
   });
 
@@ -7987,9 +8013,11 @@ Context:
       res.json({ home });
     } catch (error) {
       console.error("Failed to resolve home directory:", error);
-      res.status(500).json({
-        error: (error && error.message) || "Failed to resolve home directory",
-      });
+      res
+        .status(500)
+        .json({
+          error: (error && error.message) || "Failed to resolve home directory",
+        });
     }
   });
 
@@ -8201,9 +8229,11 @@ Context:
       }
 
       if (resolvedOld.base !== resolvedNew.base) {
-        return res.status(400).json({
-          error: "Source and destination must share the same workspace root",
-        });
+        return res
+          .status(400)
+          .json({
+            error: "Source and destination must share the same workspace root",
+          });
       }
 
       await fsPromises.rename(resolvedOld.resolved, resolvedNew.resolved);
@@ -8433,9 +8463,11 @@ Context:
       });
     } catch (error) {
       console.error("Failed to execute commands:", error);
-      res.status(500).json({
-        error: (error && error.message) || "Failed to execute commands",
-      });
+      res
+        .status(500)
+        .json({
+          error: (error && error.message) || "Failed to execute commands",
+        });
     }
   });
 
@@ -8649,9 +8681,11 @@ Context:
       if (code === "EACCES") {
         return res.status(403).json({ error: "Access to directory denied" });
       }
-      res.status(500).json({
-        error: (error && error.message) || "Failed to list directory",
-      });
+      res
+        .status(500)
+        .json({
+          error: (error && error.message) || "Failed to list directory",
+        });
     }
   });
 

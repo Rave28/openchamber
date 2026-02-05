@@ -55,6 +55,12 @@ All notable changes to this project will be documented in this file.
 
 ## [1.6.4] - 2026-02-05
 
+- **Intelligence Matrix**: Integrated 46 specialized skills, categorized by agent persona and indexed via `skills_manifest.json`.
+- **Vibe Dashboard**: New UI component in `packages/ui` for real-time swarm telemetry and heartbeat monitoring.
+- **Autonomous Workflows**: Introduced `/self-heal`, `/security-audit`, and `/sync-docs` workflows in `.agent/workflows`.
+- **Self-Healing**: Enabled autonomous recovery from build/test failures using the `self-healing-loop` skill.
+- **Hive Memory**: Established `.opencode/HIVE_MEMORY.md` for shared agent consciousness and global decision tracking.
+- **Infrastructure**: Added `npm run skills:sync` to automate skill index generation.
 - Desktop: switch between local and remote OpenChamber instances, plus a thinner runtime for better feature parity and fewer desktop-only quirks.
 - VSCode: improved Windows PATH resolution and cold-start readiness checks to reduce "stuck loading" for sessions/models/agents.
 - Mobile: split Agent/Model controls and a quick commands button with autocomplete (Commands/Agents/Files) for easier input (thanks to @Jovines, @gsxdsm).
@@ -65,12 +71,6 @@ All notable changes to this project will be documented in this file.
 - Git: improved macOS SSH agent support for smoother private-repo auth (thanks to @shekohex).
 - Web: fixed missing icon when installing the Android PWA (thanks to @nelsonPires5).
 - GitHub: PR description generation supports optional extra context for better summaries (thanks to @nelsonPires5).
-- **Intelligence Matrix**: Integrated 46 specialized skills, categorized by agent persona and indexed via `skills_manifest.json`.
-- **Vibe Dashboard**: New UI component in `packages/ui` for real-time swarm telemetry and heartbeat monitoring.
-- **Autonomous Workflows**: Introduced `/self-heal`, `/security-audit`, and `/sync-docs` workflows in `.agent/workflows`.
-- **Self-Healing**: Enabled autonomous recovery from build/test failures using the `self-healing-loop` skill.
-- **Hive Memory**: Established `.opencode/HIVE_MEMORY.md` for shared agent consciousness and global decision tracking.
-- **Infrastructure**: Added `npm run skills:sync` to automate skill index generation.
 
 ## [1.6.3] - 2026-02-2
 
