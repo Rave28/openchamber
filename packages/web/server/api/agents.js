@@ -1,4 +1,5 @@
 import express from "express";
+import path from "path";
 import {
   spawnAgent,
   getAllAgents,
@@ -31,8 +32,22 @@ import {
 } from "../lib/conflict-resolver.js";
 
 const router = express.Router();
+// Enforce strict JSON body size limits
+router.use(express.json({ limit: "256kb" }));
+// Simple in-memory rate limiter (burst 20/min per IP)
+const windowMs = 60_000;
+const max = 20;
+const hits = new Map();
+router.use((req, res, next) => {
+  const key = `${req.ip}:${Math.floor(Date.now() / windowMs)}`;
+  const count = (hits.get(key) || 0) + 1;
+  hits.set(key, count);
+  if (count > max) return res.status(429).json({ error: "Too many requests" });
+  next();
+});
 
 const validateSpawnRequest = (body) => {
+  if (!body) return ["Request body is required"];
   const errors = [];
 
   if (!body.projectDirectory || typeof body.projectDirectory !== "string") {
@@ -47,16 +62,27 @@ const validateSpawnRequest = (body) => {
     errors.push("agentName must be less than 100 characters");
   }
 
-  if (body.agentType && !["subagent", "specialist", "autonomous"].includes(body.agentType)) {
+  if (
+    body.agentType &&
+    !["subagent", "specialist", "autonomous"].includes(body.agentType)
+  ) {
     errors.push("agentType must be one of: subagent, specialist, autonomous");
   }
 
   if (body.branchName && typeof body.branchName !== "string") {
     errors.push("branchName must be a string");
   }
-
-  if (body.branchName && body.branchName.length > 200) {
-    errors.push("branchName must be less than 200 characters");
+  if (body.branchName) {
+    if (body.branchName.length > 200)
+      errors.push("branchName must be less than 200 characters");
+    const branchRegex = /^(?!\/|.*[.]{2}|.*@{)|^(?!.*\s)(?!.*[~^:?*\[\\]).+$/;
+    if (!branchRegex.test(body.branchName))
+      errors.push("branchName contains invalid characters");
+  }
+  if (body.agentName) {
+    const nameRegex = /^[a-zA-Z0-9-_.]{1,100}$/;
+    if (!nameRegex.test(body.agentName))
+      errors.push("agentName must be alphanumeric with - _ . only");
   }
 
   if (body.task && typeof body.task !== "string") {
@@ -76,7 +102,14 @@ router.post("/spawn", async (req, res) => {
       });
     }
 
-    const { projectDirectory, agentName, agentType, task, branchName, baseBranch } = req.body;
+    const {
+      projectDirectory,
+      agentName,
+      agentType,
+      task,
+      branchName,
+      baseBranch,
+    } = req.body;
 
     const validated = await validateDirectoryPath(projectDirectory);
     if (!validated.ok) {
@@ -85,9 +118,19 @@ router.post("/spawn", async (req, res) => {
         details: validated.error,
       });
     }
+    const resolved = path.resolve(validated.directory);
+    const serverRoot = path.resolve(process.cwd());
+    const repoRoot = path.resolve(serverRoot, "..", "..");
+
+    if (!resolved.startsWith(repoRoot + path.sep) && resolved !== repoRoot) {
+      return res.status(400).json({
+        error: "Invalid project directory",
+        details: "Path outside allowed project root",
+      });
+    }
 
     const agent = await spawnAgent({
-      projectDirectory: validated.directory,
+      projectDirectory: resolved,
       agentName,
       agentType: agentType || "subagent",
       task: task || null,
@@ -311,10 +354,20 @@ router.post("/consolidate/:id", async (req, res) => {
       });
     }
 
-    if (!Array.isArray(agentIds) || agentIds.length === 0) {
+    if (
+      !Array.isArray(agentIds) ||
+      agentIds.length === 0 ||
+      agentIds.length > 50
+    ) {
       return res.status(400).json({
         error: "Invalid request",
-        details: "agentIds must be a non-empty array",
+        details: "agentIds must be a non-empty array with at most 50 items",
+      });
+    }
+    if (!agentIds.every((x) => typeof x === "string" && x.length <= 200)) {
+      return res.status(400).json({
+        error: "Invalid request",
+        details: "All agentIds must be strings",
       });
     }
 
@@ -392,7 +445,9 @@ router.get("/consolidate/:id/conflicts", async (req, res) => {
     });
 
     const session = await detectConflicts(conflictSession.id, {});
-    const resolutionData = await generateConflictResolutionData(conflictSession.id);
+    const resolutionData = await generateConflictResolutionData(
+      conflictSession.id,
+    );
 
     return res.json({
       success: true,
@@ -448,7 +503,8 @@ router.get("/consolidate/:id/preview", async (req, res) => {
       });
     }
 
-    const { generateMergePreview } = await import("../lib/result-consolidator.js");
+    const { generateMergePreview } =
+      await import("../lib/result-consolidator.js");
     const preview = await generateMergePreview(id);
 
     return res.json({

@@ -112,6 +112,40 @@ const normalizeDirectoryPath = (value) => {
   return trimmed;
 };
 
+const resolveDirectoryCandidate = (candidate) => {
+  if (typeof candidate !== "string") {
+    return null;
+  }
+  const trimmed = candidate.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const normalized = normalizeDirectoryPath(trimmed);
+  return path.resolve(normalized);
+};
+
+export const validateDirectoryPath = async (candidate) => {
+  const resolved = resolveDirectoryCandidate(candidate);
+  if (!resolved) {
+    return { ok: false, error: "Directory parameter is required" };
+  }
+  try {
+    const stats = await fsp.stat(resolved);
+    if (!stats.isDirectory()) {
+      return { ok: false, error: "Specified path is not a directory" };
+    }
+    return { ok: true, directory: resolved };
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return { ok: false, error: "Directory not found" };
+    }
+    if (error?.code === "EACCES") {
+      return { ok: false, error: "Access to directory denied" };
+    }
+    return { ok: false, error: "Failed to validate directory" };
+  }
+};
+
 const cleanBranchName = (branch) => {
   if (!branch) {
     return branch;
