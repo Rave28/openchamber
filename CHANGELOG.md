@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-02-05
+
+- **Agent Manager**: New parallel development feature using git worktrees
+  - Spawn multiple isolated AI agents with unique worktree branches
+  - Real-time monitoring dashboard with agent status cards
+  - Interactive Worktree Graph visualization with zoom/pan controls
+  - Result consolidation with automatic conflict detection
+  - Multiple merge strategies: auto, voting, manual, union
+  - Resource monitoring (memory, CPU) per agent
+  - Auto-cleanup for stale agents and worktrees
+- **Agent Isolation**: Secure process sandboxing
+  - Per-agent environment isolation with custom variables
+  - Memory limit enforcement (512 MB default)
+  - Timeout handling (30 minutes default)
+  - Stdin/stdout/stderr streaming
+  - Automatic cleanup on process exit/failure
+- **Swarm Coordinator**: Inter-agent coordination
+  - Message bus for pub/sub communication
+  - Barrier synchronization for multi-agent workflows
+  - Leader election for coordination tasks
+  - Task partitioning across agents
+  - Message retry with exponential backoff
+- **Agent Registry**: Persistent agent state management
+  - Agent registration and lifecycle tracking
+  - Worktree-to-agent mapping
+  - Automatic pruning of old agents (24 hours)
+  - Status change event emission
+- **API**: Complete REST API for agent management
+  - Agent CRUD operations (GET, POST, DELETE)
+  - Worktree listing and diff operations
+  - Consolidation workflow endpoints
+  - Swarm coordination (barriers, elections, partitions)
+  - Server-Sent Events for real-time updates
+  - WebSocket API for live agent streams
+- **Testing**: Comprehensive test suite
+  - Unit tests for worktree service, agent isolation, swarm coordinator
+  - UI component tests for Dashboard and Worktree Graph
+  - E2E Playwright tests for full workflows
+  - 90%+ code coverage target
+- **Documentation**: Complete user and API guides
+  - Agent Manager user guide with screenshots
+  - Full API reference with TypeScript types
+  - Video walkthrough script for demos
+- **Breaking Changes**: None
+- **Migration Notes**: No migration required for existing users
+- **Known Issues**:
+  - Large agent counts (>5) may require significant disk space
+  - Windows process monitoring uses PowerShell (may be slower than Linux/Mac)
+
 ## [1.6.4] - 2026-02-04
 
 - **Intelligence Matrix**: Integrated 46 specialized skills, categorized by agent persona and indexed via `skills_manifest.json`.

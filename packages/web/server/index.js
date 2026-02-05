@@ -15,6 +15,7 @@ import {
 } from "./lib/cloudflare-tunnel.js";
 import { createOpencodeServer } from "@opencode-ai/sdk/server";
 import webPush from "web-push";
+import agentsRouter from "./api/agents.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -3457,6 +3458,7 @@ async function main(options = {}) {
       req.path.startsWith("/api/prompts") ||
       req.path.startsWith("/api/terminal") ||
       req.path.startsWith("/api/opencode") ||
+      req.path.startsWith("/api/agents") ||
       req.path.startsWith("/api/push")
     ) {
       express.json({ limit: "50mb" })(req, res, next);
@@ -6728,6 +6730,8 @@ async function main(options = {}) {
     }
   });
 
+  app.use("/api/agents", agentsRouter);
+
   app.get("/api/git/discover-credentials", async (req, res) => {
     try {
       const { discoverGitCredentials } =
@@ -6774,6 +6778,63 @@ async function main(options = {}) {
     } catch (error) {
       console.error("Failed to get remote url:", error);
       res.status(500).json({ error: "Failed to get remote url" });
+    }
+  });
+
+  app.get("/api/git/remotes", async (req, res) => {
+    const { getRemotes } = await getGitLibraries();
+    try {
+      const directory = req.query.directory;
+      if (!directory) {
+        return res
+          .status(400)
+          .json({ error: "directory parameter is required" });
+      }
+
+      const remotes = await getRemotes(directory);
+      res.json(remotes);
+    } catch (error) {
+      console.error("Failed to get remotes:", error);
+      res.status(500).json({ error: "Failed to get remotes" });
+    }
+  });
+
+  app.post("/api/git/remotes", async (req, res) => {
+    const { addRemote } = await getGitLibraries();
+    try {
+      const { directory, name, url } = req.body;
+      if (!directory || !name || !url) {
+        return res
+          .status(400)
+          .json({ error: "directory, name, and url are required" });
+      }
+
+      const result = await addRemote(directory, name, url);
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to add remote:", error);
+      res.status(500).json({ error: error.message || "Failed to add remote" });
+    }
+  });
+
+  app.delete("/api/git/remotes/:name", async (req, res) => {
+    const { removeRemote } = await getGitLibraries();
+    try {
+      const { directory } = req.query;
+      const { name } = req.params;
+      if (!directory || !name) {
+        return res
+          .status(400)
+          .json({ error: "directory and name are required" });
+      }
+
+      const result = await removeRemote(directory, name);
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to remove remote:", error);
+      res
+        .status(500)
+        .json({ error: error.message || "Failed to remove remote" });
     }
   });
 
