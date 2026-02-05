@@ -21,6 +21,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DEFAULT_PORT = 3000;
+const DESKTOP_NOTIFY_PREFIX = "[OpenChamberDesktopNotify] ";
+const uiNotificationClients = new Set();
 const HEALTH_CHECK_INTERVAL = 15000;
 const SHUTDOWN_TIMEOUT = 10000;
 const MODELS_DEV_API_URL = "https://models.dev/api.json";
@@ -929,6 +931,31 @@ const normalizeStringArray = (input) => {
   );
 };
 
+const sanitizeModelRefs = (input, limit) => {
+  if (!Array.isArray(input)) {
+    return undefined;
+  }
+
+  const result = [];
+  const seen = new Set();
+
+  for (const entry of input) {
+    if (!entry || typeof entry !== "object") continue;
+    const providerID =
+      typeof entry.providerID === "string" ? entry.providerID.trim() : "";
+    const modelID =
+      typeof entry.modelID === "string" ? entry.modelID.trim() : "";
+    if (!providerID || !modelID) continue;
+    const key = `${providerID}/${modelID}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ providerID, modelID });
+    if (result.length >= limit) break;
+  }
+
+  return result;
+};
+
 const sanitizeSkillCatalogs = (input) => {
   if (!Array.isArray(input)) {
     return undefined;
@@ -1028,6 +1055,10 @@ const sanitizeProjects = (input) => {
       if (Object.keys(defaults).length > 0) {
         project.worktreeDefaults = defaults;
       }
+    }
+
+    if (typeof candidate.sidebarCollapsed === "boolean") {
+      project.sidebarCollapsed = candidate.sidebarCollapsed;
     }
 
     result.push(project);
@@ -1260,6 +1291,15 @@ const sanitizeSettingsUpdate = (payload) => {
       0,
       Math.min(100, Math.round(candidate.inputBarOffset)),
     );
+  }
+  const favoriteModels = sanitizeModelRefs(candidate.favoriteModels, 64);
+  if (favoriteModels) {
+    result.favoriteModels = favoriteModels;
+  }
+
+  const recentModels = sanitizeModelRefs(candidate.recentModels, 16);
+  if (recentModels) {
+    result.recentModels = recentModels;
   }
   if (typeof candidate.diffLayoutPreference === "string") {
     const mode = candidate.diffLayoutPreference.trim();
@@ -1590,16 +1630,63 @@ const migrateSettingsFromLegacyThemePreferences = async (current) => {
   return { settings: merged, changed: true };
 };
 
+const migrateSettingsFromLegacyCollapsedProjects = async (current) => {
+  const settings = current && typeof current === "object" ? current : {};
+  const collapsed = Array.isArray(settings.collapsedProjects)
+    ? normalizeStringArray(settings.collapsedProjects)
+    : [];
+
+  if (collapsed.length === 0 || !Array.isArray(settings.projects)) {
+    if (collapsed.length === 0) {
+      return { settings, changed: false };
+    }
+    // Nothing to apply to; drop legacy key.
+    const next = { ...settings };
+    delete next.collapsedProjects;
+    return { settings: next, changed: true };
+  }
+
+  const set = new Set(collapsed);
+  const projects = sanitizeProjects(settings.projects) || [];
+  let changed = false;
+
+  const nextProjects = projects.map((project) => {
+    const shouldCollapse = set.has(project.id);
+    if (project.sidebarCollapsed !== shouldCollapse) {
+      changed = true;
+      return { ...project, sidebarCollapsed: shouldCollapse };
+    }
+    return project;
+  });
+
+  if (!changed) {
+    // Still drop legacy key if present.
+    if (Object.prototype.hasOwnProperty.call(settings, "collapsedProjects")) {
+      const next = { ...settings };
+      delete next.collapsedProjects;
+      return { settings: next, changed: true };
+    }
+    return { settings, changed: false };
+  }
+
+  const next = { ...settings, projects: nextProjects };
+  delete next.collapsedProjects;
+  return { settings: next, changed: true };
+};
+
 const readSettingsFromDiskMigrated = async () => {
   const current = await readSettingsFromDisk();
   const migration1 = await migrateSettingsFromLegacyLastDirectory(current);
   const migration2 = await migrateSettingsFromLegacyThemePreferences(
     migration1.settings,
   );
-  if (migration1.changed || migration2.changed) {
-    await writeSettingsToDisk(migration2.settings);
+  const migration3 = await migrateSettingsFromLegacyCollapsedProjects(
+    migration2.settings,
+  );
+  if (migration1.changed || migration2.changed || migration3.changed) {
+    await writeSettingsToDisk(migration3.settings);
   }
-  return migration2.settings;
+  return migration3.settings;
 };
 
 const getOrCreateVapidKeys = async () => {
@@ -1866,17 +1953,22 @@ const sessionActivityCooldowns = new Map(); // sessionId -> timeoutId
 const SESSION_COOLDOWN_DURATION_MS = 2000;
 
 const setSessionActivityPhase = (sessionId, phase) => {
-  if (!sessionId || typeof sessionId !== "string") return;
+  if (!sessionId || typeof sessionId !== "string") return false;
 
-  // Cancel existing cooldown timer
+  const current = sessionActivityPhases.get(sessionId);
+  if (current?.phase === phase) return false; // No change
+
+  // Match desktop semantics: only enter cooldown from busy.
+  if (phase === "cooldown" && current?.phase !== "busy") {
+    return false;
+  }
+
+  // Cancel existing cooldown timer only on phase change.
   const existingTimer = sessionActivityCooldowns.get(sessionId);
   if (existingTimer) {
     clearTimeout(existingTimer);
     sessionActivityCooldowns.delete(sessionId);
   }
-
-  const current = sessionActivityPhases.get(sessionId);
-  if (current?.phase === phase) return; // No change
 
   sessionActivityPhases.set(sessionId, { phase, updatedAt: Date.now() });
 
@@ -1894,6 +1986,8 @@ const setSessionActivityPhase = (sessionId, phase) => {
     }, SESSION_COOLDOWN_DURATION_MS);
     sessionActivityCooldowns.set(sessionId, timer);
   }
+
+  return true;
 };
 
 const getSessionActivitySnapshot = () => {
@@ -1926,14 +2020,24 @@ const resolveVapidSubject = async () => {
 
   const originEnv = process.env.OPENCHAMBER_PUBLIC_ORIGIN;
   if (typeof originEnv === "string" && originEnv.trim().length > 0) {
-    return originEnv.trim();
+    const trimmed = originEnv.trim();
+    // Convert http://localhost to mailto for VAPID compatibility
+    if (trimmed.startsWith("http://localhost")) {
+      return "mailto:openchamber@localhost";
+    }
+    return trimmed;
   }
 
   try {
     const settings = await readSettingsFromDiskMigrated();
     const stored = settings?.publicOrigin;
     if (typeof stored === "string" && stored.trim().length > 0) {
-      return stored.trim();
+      const trimmed = stored.trim();
+      // Convert http://localhost to mailto for VAPID compatibility
+      if (trimmed.startsWith("http://localhost")) {
+        return "mailto:openchamber@localhost";
+      }
+      return trimmed;
     }
   } catch {
     // ignore
@@ -2108,6 +2212,7 @@ const ENV_CONFIGURED_OPENCODE_PORT = (() => {
 const ENV_SKIP_OPENCODE_START =
   process.env.OPENCODE_SKIP_START === "true" ||
   process.env.OPENCHAMBER_SKIP_OPENCODE_START === "true";
+const ENV_DESKTOP_NOTIFY = process.env.OPENCHAMBER_DESKTOP_NOTIFY === "true";
 
 const ENV_CONFIGURED_API_PREFIX = normalizeApiPrefix(
   process.env.OPENCODE_API_PREFIX || process.env.OPENCHAMBER_API_PREFIX || "",
@@ -2174,9 +2279,11 @@ const startGlobalEventWatcher = async () => {
             const payload = parseSseDataPayload(block);
             void maybeSendPushForTrigger(payload);
             // Track session activity independently of UI (mirrors Tauri desktop behavior)
-            const activity = deriveSessionActivity(payload);
-            if (activity) {
-              setSessionActivityPhase(activity.sessionId, activity.phase);
+            const transitions = deriveSessionActivityTransitions(payload);
+            if (transitions && transitions.length > 0) {
+              for (const activity of transitions) {
+                setSessionActivityPhase(activity.sessionId, activity.phase);
+              }
             }
           }
         }
@@ -2432,9 +2539,72 @@ function parseSseDataPayload(block) {
   }
 }
 
-function deriveSessionActivity(payload) {
+function emitDesktopNotification(payload) {
+  if (!ENV_DESKTOP_NOTIFY) {
+    return;
+  }
+
   if (!payload || typeof payload !== "object") {
-    return null;
+    return;
+  }
+
+  try {
+    // One-line protocol consumed by the Tauri shell.
+    process.stdout.write(
+      `${DESKTOP_NOTIFY_PREFIX}${JSON.stringify(payload)}\n`,
+    );
+  } catch {
+    // ignore
+  }
+}
+
+function broadcastUiNotification(payload) {
+  if (!payload || typeof payload !== "object") {
+    return;
+  }
+
+  if (uiNotificationClients.size === 0) {
+    return;
+  }
+
+  for (const res of uiNotificationClients) {
+    try {
+      writeSseEvent(res, {
+        type: "openchamber:notification",
+        properties: payload,
+      });
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function isStreamingAssistantPart(properties) {
+  if (!properties || typeof properties !== "object") {
+    return false;
+  }
+
+  const info = properties?.info;
+  const role = info?.role;
+  if (role !== "assistant") {
+    return false;
+  }
+
+  const part = properties?.part;
+  const partType = part?.type;
+  return (
+    partType === "step-start" ||
+    partType === "text" ||
+    partType === "tool" ||
+    partType === "reasoning" ||
+    partType === "file" ||
+    partType === "patch"
+  );
+}
+
+function deriveSessionActivityTransitions(payload) {
+  if (!payload || typeof payload !== "object") {
+    return [];
   }
 
   if (payload.type === "session.status") {
@@ -2450,7 +2620,7 @@ function deriveSessionActivity(payload) {
     ) {
       const phase =
         statusType === "busy" || statusType === "retry" ? "busy" : "idle";
-      return { sessionId, phase };
+      return [{ sessionId, phase }];
     }
   }
 
@@ -2469,7 +2639,7 @@ function deriveSessionActivity(payload) {
       role === "assistant" &&
       finish === "stop"
     ) {
-      return { sessionId, phase: "cooldown" };
+      return [{ sessionId, phase: "cooldown" }];
     }
   }
 
@@ -2485,10 +2655,27 @@ function deriveSessionActivity(payload) {
     if (
       typeof sessionId === "string" &&
       sessionId.length > 0 &&
-      role === "assistant" &&
-      finish === "stop"
+      role === "assistant"
     ) {
-      return { sessionId, phase: "cooldown" };
+      const transitions = [];
+      const info = payload.properties?.info;
+      const part = payload.properties?.part;
+      const partType = part?.type;
+
+      if (
+        partType === "step-start" ||
+        partType === "thought" ||
+        partType === "call" ||
+        partType === "reasoning"
+      ) {
+        transitions.push({ sessionId, phase: "busy" });
+      }
+
+      if (finish === "stop") {
+        transitions.push({ sessionId, phase: "cooldown" });
+      }
+
+      return transitions;
     }
   }
 
@@ -2496,11 +2683,11 @@ function deriveSessionActivity(payload) {
     const sessionId =
       payload.properties?.sessionID ?? payload.properties?.sessionId;
     if (typeof sessionId === "string" && sessionId.length > 0) {
-      return { sessionId, phase: "idle" };
+      return [{ sessionId, phase: "idle" }];
     }
   }
 
-  return null;
+  return [];
 }
 
 const PUSH_READY_COOLDOWN_MS = 5000;
@@ -2628,6 +2815,7 @@ const maybeSendPushForTrigger = async (payload) => {
     if (info?.role === "assistant" && info?.finish === "stop" && sessionId) {
       // Check if this is a subtask and if we should notify for subtasks
       const settings = await readSettingsFromDisk();
+
       if (settings.notifyOnSubtasks === false) {
         // Prefer parentID on payload (if present), else fetch from sessions list.
         const sessionInfo = payload.properties?.session;
@@ -2652,6 +2840,19 @@ const maybeSendPushForTrigger = async (payload) => {
 
       const title = `${formatMode(info?.mode)} agent is ready`;
       const body = `${formatModelId(info?.modelID)} completed the task`;
+
+      if (settings.nativeNotificationsEnabled) {
+        const payload = {
+          title,
+          body,
+          tag: `ready-${sessionId}`,
+          kind: "ready",
+          sessionId,
+          requireHidden: settings.notificationMode !== "always",
+        };
+        emitDesktopNotification(payload);
+        broadcastUiNotification(payload);
+      }
 
       await sendPushToAllUiSessions(
         {
@@ -2679,6 +2880,46 @@ const maybeSendPushForTrigger = async (payload) => {
 
     const timer = setTimeout(() => {
       pushQuestionDebounceTimers.delete(sessionId);
+
+      void readSettingsFromDisk().then((settings) => {
+        if (!settings.nativeNotificationsEnabled) {
+          return;
+        }
+
+        const firstQuestion = payload.properties?.questions?.[0];
+        const header =
+          typeof firstQuestion?.header === "string"
+            ? firstQuestion.header.trim()
+            : "";
+        const questionText =
+          typeof firstQuestion?.question === "string"
+            ? firstQuestion.question.trim()
+            : "";
+        const title = /plan\s*mode/i.test(header)
+          ? "Switch to plan mode"
+          : /build\s*agent/i.test(header)
+            ? "Switch to build mode"
+            : header || "Input needed";
+        const body = questionText || "Agent is waiting for your response";
+
+        emitDesktopNotification({
+          kind: "question",
+          title,
+          body,
+          tag: `question-${sessionId}`,
+          sessionId,
+          requireHidden: settings.notificationMode !== "always",
+        });
+
+        broadcastUiNotification({
+          kind: "question",
+          title,
+          body,
+          tag: `question-${sessionId}`,
+          sessionId,
+          requireHidden: settings.notificationMode !== "always",
+        });
+      });
 
       const firstQuestion = payload.properties?.questions?.[0];
       const header =
@@ -2731,6 +2972,41 @@ const maybeSendPushForTrigger = async (payload) => {
 
     const timer = setTimeout(() => {
       pushPermissionDebounceTimers.delete(sessionId);
+      void readSettingsFromDisk().then((settings) => {
+        if (!settings.nativeNotificationsEnabled) {
+          return;
+        }
+
+        const title = "Permission required";
+        const sessionTitle = payload.properties?.sessionTitle;
+        const body =
+          typeof sessionTitle === "string" && sessionTitle.trim().length > 0
+            ? sessionTitle.trim()
+            : "Agent is waiting for your approval";
+
+        emitDesktopNotification({
+          kind: "permission",
+          title,
+          body,
+          tag: requestKey
+            ? `permission-${requestKey}`
+            : `permission-${sessionId}`,
+          sessionId,
+          requireHidden: settings.notificationMode !== "always",
+        });
+
+        broadcastUiNotification({
+          kind: "permission",
+          title,
+          body,
+          tag: requestKey
+            ? `permission-${requestKey}`
+            : `permission-${sessionId}`,
+          sessionId,
+          requireHidden: settings.notificationMode !== "always",
+        });
+      });
+
       if (requestKey) {
         notifiedPermissionRequests.add(requestKey);
       }
@@ -3852,6 +4128,13 @@ async function main(options = {}) {
       res.flushHeaders();
     }
 
+    uiNotificationClients.add(res);
+    const cleanupClient = () => {
+      uiNotificationClients.delete(res);
+    };
+    req.on("close", cleanupClient);
+    req.on("error", cleanupClient);
+
     const heartbeatInterval = setInterval(() => {
       writeSseEvent(res, {
         type: "openchamber:heartbeat",
@@ -3869,17 +4152,19 @@ async function main(options = {}) {
 
 `);
       const payload = parseSseDataPayload(block);
-      void maybeSendPushForTrigger(payload);
-      const activity = deriveSessionActivity(payload);
-      if (activity) {
-        setSessionActivityPhase(activity.sessionId, activity.phase);
-        writeSseEvent(res, {
-          type: "openchamber:session-activity",
-          properties: {
-            sessionId: activity.sessionId,
-            phase: activity.phase,
-          },
-        });
+      const transitions = deriveSessionActivityTransitions(payload);
+      if (transitions && transitions.length > 0) {
+        for (const activity of transitions) {
+          if (setSessionActivityPhase(activity.sessionId, activity.phase)) {
+            writeSseEvent(res, {
+              type: "openchamber:session-activity",
+              properties: {
+                sessionId: activity.sessionId,
+                phase: activity.phase,
+              },
+            });
+          }
+        }
       }
     };
 
@@ -3908,6 +4193,7 @@ async function main(options = {}) {
       }
     } finally {
       clearInterval(heartbeatInterval);
+      cleanupClient();
       cleanup();
       try {
         res.end();
@@ -4003,17 +4289,19 @@ async function main(options = {}) {
 
 `);
       const payload = parseSseDataPayload(block);
-      void maybeSendPushForTrigger(payload);
-      const activity = deriveSessionActivity(payload);
-      if (activity) {
-        setSessionActivityPhase(activity.sessionId, activity.phase);
-        writeSseEvent(res, {
-          type: "openchamber:session-activity",
-          properties: {
-            sessionId: activity.sessionId,
-            phase: activity.phase,
-          },
-        });
+      const transitions = deriveSessionActivityTransitions(payload);
+      if (transitions && transitions.length > 0) {
+        for (const activity of transitions) {
+          if (setSessionActivityPhase(activity.sessionId, activity.phase)) {
+            writeSseEvent(res, {
+              type: "openchamber:session-activity",
+              properties: {
+                sessionId: activity.sessionId,
+                phase: activity.phase,
+              },
+            });
+          }
+        }
       }
     };
 
@@ -8898,7 +9186,17 @@ Context:
     scheduleOpenCodeApiDetection();
   }
 
-  const distPath = path.join(__dirname, "..", "dist");
+  const distPath = (() => {
+    const env =
+      typeof process.env.OPENCHAMBER_DIST_DIR === "string"
+        ? process.env.OPENCHAMBER_DIST_DIR.trim()
+        : "";
+    if (env) {
+      return path.resolve(env);
+    }
+    return path.join(__dirname, "..", "dist");
+  })();
+
   if (fs.existsSync(distPath)) {
     console.log(`Serving static files from ${distPath}`);
     app.use(
@@ -8937,13 +9235,19 @@ Context:
 
   let activePort = port;
 
+  const bindHost =
+    typeof process.env.OPENCHAMBER_HOST === "string" &&
+    process.env.OPENCHAMBER_HOST.trim().length > 0
+      ? process.env.OPENCHAMBER_HOST.trim()
+      : null;
+
   await new Promise((resolve, reject) => {
     const onError = (error) => {
       server.off("error", onError);
       reject(error);
     };
     server.once("error", onError);
-    server.listen(port, async () => {
+    const onListening = async () => {
       server.off("error", onError);
       const addressInfo = server.address();
       activePort =
@@ -8988,7 +9292,13 @@ Context:
       }
 
       resolve();
-    });
+    };
+
+    if (bindHost) {
+      server.listen(port, bindHost, onListening);
+    } else {
+      server.listen(port, onListening);
+    }
   });
 
   if (attachSignals && !signalsAttached) {
